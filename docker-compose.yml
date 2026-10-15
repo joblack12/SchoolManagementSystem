@@ -1,0 +1,26 @@
+services:
+  schoolmanagementsystem:
+    image: ${DOCKER_REGISTRY-}schoolmanagementsystem
+    build:
+      context: .
+      dockerfile: SchoolManagementSystem/Dockerfile
+    depends_on:
+      sqlserver:
+        condition: service_healthy # 👈 Forces app to wait until DB passes health checks
+
+  # Your New SQL Server Service
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=Maryajoeblack12#
+    ports:
+      - "1433:1433" # Maps container port 1433 to your local host machine
+
+ # 💡 Defines a health check to ping SQL Server until it's ready to handle queries
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "Maryajoeblack12#", "-C", "-Q", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
