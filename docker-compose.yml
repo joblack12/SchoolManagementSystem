@@ -1,26 +1,35 @@
 services:
   schoolmanagementsystem:
-    image: ${DOCKER_REGISTRY-}schoolmanagementsystem
+    image: joblack12/schoolmanagementsystem:latest
     build:
       context: .
       dockerfile: SchoolManagementSystem/Dockerfile
+    user: root
+    init: true
+    ports:
+      - "8080:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - COMPlus_ThreadPool_MinThreads=200
+      - ASPNETCORE_URLS=http://+:80
+      - AppUrl=http://localhost:8080
+      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=SchoolDbContext;User Id=sa;Password=Maryajoeblack12#;TrustServerCertificate=True;MultipleActiveResultSets=True;Connect Timeout=120;
+    volumes:
+      - dataprotection_keys:/app/keys
     depends_on:
       sqlserver:
-        condition: service_healthy # 👈 Forces app to wait until DB passes health checks
+        condition: service_started
 
-  # Your New SQL Server Service
   sqlserver:
-    image: mcr.microsoft.com/mssql/server
+    image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=Maryajoeblack12#
     ports:
-      - "1433:1433" # Maps container port 1433 to your local host machine
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
 
- # 💡 Defines a health check to ping SQL Server until it's ready to handle queries
-    healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "Maryajoeblack12#", "-C", "-Q", "SELECT 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
+volumes:
+  mssql_data:
+  dataprotection_keys:

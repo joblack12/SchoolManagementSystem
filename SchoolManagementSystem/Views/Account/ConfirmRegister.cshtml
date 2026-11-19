@@ -1,0 +1,14 @@
+﻿@{
+    ViewData["Title"] = "Registration Successful";
+}
+
+<div class="container py-5">
+    <h2>@ViewData["Title"]</h2>
+    <p class="lead">The account has been created successfully.</p>
+
+    <div class="mt-4">
+        <a class="btn btn-primary" asp-action="Login" asp-controller="Account">Go to Login</a>
+        <a class="btn btn-secondary" asp-action="Index" asp-controller="Home">Back to Home</a>
+        <a class="btn btn-link" asp-action="Register" asp-controller="Account">Register another user</a>
+    </div>
+</div>

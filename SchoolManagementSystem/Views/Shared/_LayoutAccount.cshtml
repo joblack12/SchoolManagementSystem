@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -12,13 +12,15 @@
     <!-- CSS Específico para as Views de Conta -->
     <link rel="stylesheet" href="~/css/style-account.css" asp-append-version="true" />
     <!-- Google Fonts -->
-    <link href="//fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://googleapis.com" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cloudflare.com" />
     <!-- SweetAlert2 CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <link rel="stylesheet" href="https://jsdelivr.net">
 </head>
 <body class="form-account-background">
     <!-- Navbar -->
-    @Html.Partial("_Navbar")
+    <partial name="_Navbar" />
 
     <!-- Main Content -->
     <main class="form-account-padding">
@@ -26,14 +28,14 @@
     </main>
 
     <!-- Footer -->
-    @Html.Partial("_Footer")
+    <partial name="_Footer" />
 
     <!-- JS Scripts -->
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="https://cdn.syncfusion.com/ej2/dist/ej2.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/js/all.min.js"></script>
+    <script src="https://jsdelivr.net"></script>
+    <script src="https://syncfusion.com"></script>
     @RenderSection("Scripts", required: false)
+    <ejs-scripts></ejs-scripts>
 </body>
 </html>

@@ -18,7 +18,7 @@ namespace SchoolManagementSystem.Repositories
             return await _context.Students
                 .Include(s => s.User)             // Include the User entity
                 .Include(s => s.SchoolClass)      // Include the SchoolClass entity
-                .AsNoTracking()                   // Do not track the entities
+                .AsNoTracking() // 💡 Forces optimized read-only data assembly
                 .ToListAsync();
         }
 

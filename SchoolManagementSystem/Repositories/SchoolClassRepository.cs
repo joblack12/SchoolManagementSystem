@@ -40,7 +40,8 @@ namespace SchoolManagementSystem.Repositories
             return await _context.SchoolClasses
                 .Include(sc => sc.Course)  
                 .ThenInclude(c => c.CourseSubjects)  
-                .ThenInclude(cs => cs.Subject)  
+                .ThenInclude(cs => cs.Subject)
+                .AsNoTracking() // 💡 ADD THIS LINE HERE
                 .ToListAsync();
         }
 

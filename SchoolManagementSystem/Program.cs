@@ -1,22 +1,23 @@
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using SchoolManagementSystem.Data;
 using SchoolManagementSystem.Data.Entities;
 using SchoolManagementSystem.Helpers;
 using SchoolManagementSystem.Repositories;
-using System.Text;
 using Syncfusion.Licensing;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
 using System;
-using Microsoft.Extensions.Hosting;
-using System.IdentityModel.Tokens;
-using Microsoft.Extensions.Configuration;
-using SymmetricSecurityKey = Microsoft.IdentityModel.Tokens.SymmetricSecurityKey;
-using Microsoft.Data.SqlClient;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace SchoolManagementSystem
 {
@@ -26,34 +27,48 @@ namespace SchoolManagementSystem
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // 1. Logging Configuration
+            builder.Services.AddDataProtection()
+                .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, "keys")))
+                .SetApplicationName("SchoolManagementSystem");
+
             builder.Logging.ClearProviders();
             builder.Logging.AddConsole();
             builder.Logging.AddFile("Logs/SchoolManagementSystem-{Date}.txt");
 
-            // 2. Add controllers and views (MVC support)
             builder.Services.AddControllersWithViews();
+            builder.Services.AddRazorPages();
 
-            // 3. Database Context Configuration
+            builder.Services.ConfigureApplicationCookie(options =>
+            {
+                options.LoginPath = "/Identity/Account/Login";
+                options.LogoutPath = "/Identity/Account/Logout";
+                options.AccessDeniedPath = "/Identity/Account/AccessDenied";
+                options.Cookie.HttpOnly = true;
+                options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            });
+
             builder.Services.AddDbContext<SchoolDbContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"),
                     sqlServerOptionsAction: sqlOptions =>
                     {
-                        // 💡 Enables automatic retries during container startup delays
+                        sqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+                        sqlOptions.CommandTimeout(120);
                         sqlOptions.EnableRetryOnFailure(
                             maxRetryCount: 5,
                             maxRetryDelay: TimeSpan.FromSeconds(30),
                             errorNumbersToAdd: null);
                     }));
 
-            // In Identity configuration (for local development you can set to false)
+
+            // Consolidated Identity Configuration mapping explicit namespaces for BOTH parameters
             builder.Services.AddIdentity<User, IdentityRole>(cfg =>
             {
-                cfg.Tokens.AuthenticatorTokenProvider = TokenOptions.DefaultAuthenticatorProvider;
-                cfg.SignIn.RequireConfirmedEmail = false; // <-- set false for dev
+                cfg.Tokens.AuthenticatorTokenProvider =
+                    TokenOptions.DefaultAuthenticatorProvider;
+
+                cfg.SignIn.RequireConfirmedEmail = false;
                 cfg.User.RequireUniqueEmail = true;
 
-                // Password settings
                 cfg.Password.RequireDigit = false;
                 cfg.Password.RequiredUniqueChars = 0;
                 cfg.Password.RequireUppercase = false;
@@ -62,11 +77,11 @@ namespace SchoolManagementSystem
                 cfg.Password.RequiredLength = 6;
             })
             .AddDefaultTokenProviders()
+            .AddDefaultUI()
             .AddEntityFrameworkStores<SchoolDbContext>();
 
-            // 5. Authentication & JWT Configuration
+
             builder.Services.AddAuthentication()
-                .AddCookie()
                 .AddJwtBearer(cfg =>
                 {
                     cfg.TokenValidationParameters = new TokenValidationParameters
@@ -78,7 +93,6 @@ namespace SchoolManagementSystem
                     };
                 });
 
-            // 6. Application Repositories
             builder.Services.AddScoped<IAlertRepository, AlertRepository>();
             builder.Services.AddScoped<ICourseRepository, CourseRepository>();
             builder.Services.AddScoped<IEmployeeRepository, EmployeeRepository>();
@@ -89,15 +103,11 @@ namespace SchoolManagementSystem
             builder.Services.AddScoped<ISubjectRepository, SubjectRepository>();
             builder.Services.AddScoped<ITeacherRepository, TeacherRepository>();
             builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
-
-            // Generic Repository
             builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
-            // 7. Core Helpers & Infrastructure 
             builder.Services.AddScoped<IUserHelper, UserHelper>();
 
-            // Replace the existing AddTransient registration for IMailHelper with environment-aware registration:
-            if (builder.Environment.IsDevelopment())
+            if (builder.Environment.IsDevelopment() && (string.IsNullOrWhiteSpace(builder.Configuration["Mail:Password"]) || builder.Configuration["Mail:Password"] == "your-16-char-app-password"))
             {
                 builder.Services.AddTransient<IMailHelper, DevelopmentMailHelper>();
             }
@@ -107,25 +117,33 @@ namespace SchoolManagementSystem
             }
 
             builder.Services.AddScoped<IConverterHelper, ConverterHelper>();
-
-            // 8. Local Storage Integration (Replaced Azure Blob Storage)
             builder.Services.AddScoped<IBlobHelper, LocalFileHelper>();
-
-            // 9. Database Seeder Registration
             builder.Services.AddTransient<SeedDb>();
 
-            // 10. Syncfusion License Registration
             SyncfusionLicenseProvider.RegisterLicense("Ngo9BigBOggjHTQxAR8/V1NDaF5cWWtCf1FpRmJGdld5fUVHYVZUTXxaS00DNHVRdkdnWH9ec3RTRWhfWUx3XUY=");
 
             var app = builder.Build();
 
-            // 11. Seed Database & Roles Execution
+            // 💡 FIXED SCOPE ASSIGNMENT: Clears limits properly inside the initialization block
+            var forwardedOptions = new ForwardedHeadersOptions
+            {
+                ForwardedHeaders =
+                    ForwardedHeaders.XForwardedFor |
+                    ForwardedHeaders.XForwardedProto
+            };
+
+            forwardedOptions.KnownIPNetworks.Clear();
+            forwardedOptions.KnownProxies.Clear();
+
+            // Remove this for direct local Docker access:
+            // app.UseForwardedHeaders(forwardedOptions);
+
+
             using (var scope = app.Services.CreateScope())
             {
                 var services = scope.ServiceProvider;
                 var logger = services.GetRequiredService<ILogger<Program>>();
 
-                // 💡 Add resilience to handle the SQL Server initialization delay
                 int retryCount = 0;
                 int maxRetries = 6;
                 bool databaseReady = false;
@@ -139,14 +157,12 @@ namespace SchoolManagementSystem
 
                         logger.LogInformation("Attempting to connect and migrate database (Attempt {Retry} of {Max})...", retryCount, maxRetries);
 
-                        // Automatically applies migrations if missing
                         if (context.Database.GetPendingMigrations().Any())
                         {
                             context.Database.Migrate();
                         }
 
-                        // Trigger your seeding logic safely once connection is verified
-                        var seeder = services.GetRequiredService<SeedDb>(); // Adjust to match your exact DI structure
+                        var seeder = services.GetRequiredService<SeedDb>();
                         await seeder.SeedAsync();
 
                         databaseReady = true;
@@ -160,48 +176,34 @@ namespace SchoolManagementSystem
                     catch (Exception ex)
                     {
                         logger.LogError(ex, "An error occurred while migrating or seeding the database.");
-                        // Wait before retrying to allow transient issues to resolve
                         await Task.Delay(TimeSpan.FromSeconds(10));
                     }
                 }
             }
 
-            app.UseStatusCodePagesWithReExecute("/Error/{0}");
+            // Ensure this block does NOT force loops during local container orchestration
+            if (!app.Environment.IsDevelopment())
+            {
+                app.UseStatusCodePagesWithReExecute("/Error/{0}");
+                // @* app.UseHttpsRedirection(); *@ <-- Comment this line out completely if it is active!
+            }
 
-            app.UseHttpsRedirection();
+
             app.UseStaticFiles();
-
             app.UseRouting();
 
-            // Authentication must run before Authorization
             app.UseAuthentication();
             app.UseAuthorization();
 
-            // 13. Route Mapping configurations
+            app.MapControllerRoute(
+                name: "areas",
+                pattern: "{area:exists}/{controller=Home}/{action=Index}/{id?}");
+
             app.MapControllerRoute(
                 name: "default",
                 pattern: "{controller=Home}/{action=Index}/{id?}");
 
-            // 💡 Automatically apply database migrations on application startup
-            using (var scope = app.Services.CreateScope())
-            {
-                var services = scope.ServiceProvider;
-                try
-                {
-                    var context = services.GetRequiredService<SchoolDbContext>();
-
-                    // This will automatically create the database and apply all migrations safely
-                    if (context.Database.GetPendingMigrations().Any())
-                    {
-                        context.Database.Migrate();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    var logger = services.GetRequiredService<ILogger<Program>>();
-                    logger.LogError(ex, "An error occurred while migrating the database.");
-                }
-            }
+            app.MapRazorPages();
 
             await app.RunAsync();
         }

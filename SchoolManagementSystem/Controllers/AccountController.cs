@@ -1,22 +1,15 @@
-﻿using Azure;
-using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.IdentityModel.Tokens;
-using SchoolManagementSystem.Data.Entities;
 using SchoolManagementSystem.Helpers;
 using SchoolManagementSystem.Models;
-using System;
-using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
-using System.Security.Claims;
-using System.Text;
 using System.Threading.Tasks;
-using static Microsoft.CodeAnalysis.CSharp.SyntaxTokenParser;
 
 namespace SchoolManagementSystem.Controllers
 {
+    [Authorize]
     public class AccountController : Controller
     {
         private readonly IUserHelper _userHelper;
@@ -36,67 +29,138 @@ namespace SchoolManagementSystem.Controllers
             _logger = logger;
         }
 
-        // Displays the login page
-        public IActionResult Login()
+        [AllowAnonymous]
+        [HttpGet]
+        public IActionResult Login(string returnUrl = null)
         {
-            if (User.Identity.IsAuthenticated)
+            if (User.Identity?.IsAuthenticated == true)
             {
                 return RedirectToAction("Index", "Home");
             }
+            return RedirectToPage("/Account/Login", new { area = "Identity", returnUrl = returnUrl });
+        }
+
+        [AllowAnonymous]
+        [HttpGet]
+        public IActionResult Register()
+        {
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                return RedirectToAction("Index", "Home");
+            }
+            return RedirectToPage("/Account/Register", new { area = "Identity" });
+        }
+
+        [AllowAnonymous]
+        [HttpGet]
+        public IActionResult RegisterSuccess()
+        {
+            return RedirectToPage("/Account/RegisterConfirmation", new { area = "Identity" });
+        }
+
+        [HttpPost]
+        [AllowAnonymous]
+        public async Task<IActionResult> Logout()
+        {
+            await _userHelper.LogoutAsync();
+            return RedirectToAction("Index", "Home");
+        }
+
+        [HttpGet]
+        [AllowAnonymous]
+        public async Task<IActionResult> Logout(string returnUrl = null)
+        {
+            await _userHelper.LogoutAsync();
+            if (returnUrl != null)
+            {
+                return LocalRedirect(returnUrl);
+            }
+            return RedirectToAction("Index", "Home");
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ChangeUser()
+        {
+            var user = await _userHelper.GetUserByEmailAsync(User.Identity.Name);
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            var model = new ChangeUserViewModel
+            {
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                Address = user.Address,
+                PhoneNumber = user.PhoneNumber
+            };
+
+            return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ChangeUser(ChangeUserViewModel model)
+        {
+            if (ModelState.IsValid)
+            {
+                var user = await _userHelper.GetUserByEmailAsync(User.Identity.Name);
+                if (user != null)
+                {
+                    user.FirstName = model.FirstName;
+                    user.LastName = model.LastName;
+                    user.Address = model.Address;
+                    user.PhoneNumber = model.PhoneNumber;
+
+                    var response = await _userHelper.UpdateUserAsync(user);
+                    if (response.Succeeded)
+                    {
+                        await _userHelper.UpdateUserDataByRoleAsync(user);
+                        ViewBag.UserMessage = "User updated!";
+                    }
+                    else
+                    {
+                        ModelState.AddModelError(string.Empty, response.Errors.FirstOrDefault()?.Description ?? "Error updating user.");
+                    }
+                }
+                else
+                {
+                    ModelState.AddModelError(string.Empty, "User not found.");
+                }
+            }
+
+            return View(model);
+        }
+
+        [HttpGet]
+        public IActionResult ChangePassword()
+        {
             return View();
         }
 
-        // Processes the login
         [HttpPost]
-        public async Task<IActionResult> Login(LoginViewModel model)
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model)
         {
-            if (!ModelState.IsValid) return View(model);
-
-            // Check that the user exists first to give clearer feedback
-            var user = await _userHelper.GetUserByEmailAsync(model.Username);
-            if (user == null)
+            if (ModelState.IsValid)
             {
-                ModelState.AddModelError(string.Empty, "Invalid username or password.");
-                return View(model);
-            }
-
-            var result = await _userHelper.LoginAsync(model);
-
-            _logger.LogInformation("Login attempt for {Email}. Result: Succeeded={Succeeded}, LockedOut={LockedOut}, NotAllowed={NotAllowed}, TwoFactor={TwoFactor}",
-                model.Username, result.Succeeded, result.IsLockedOut, result.IsNotAllowed, result.RequiresTwoFactor);
-
-            if (result.Succeeded)
-            {
-                var userRole = await _userHelper.GetRoleAsync(user);
-
-                return userRole switch
+                var user = await _userHelper.GetUserByEmailAsync(User.Identity.Name);
+                if (user != null)
                 {
-                    "Admin" => RedirectToAction("AdminDashboard", "Dashboard"),
-                    "Employee" => RedirectToAction("EmployeeDashboard", "Dashboard"),
-                    "Teacher" => RedirectToAction("TeacherDashboard", "Dashboard"),
-                    "Student" => RedirectToAction("StudentDashboard", "Dashboard"),
-                    _ => RedirectToAction("Index", "Home"),
-                };
-            }
-
-            if (result.IsLockedOut)
-            {
-                ModelState.AddModelError(string.Empty, "Account locked. Please try later.");
-            }
-            else if (result.IsNotAllowed)
-            {
-                if (!user.EmailConfirmed)
-                    ModelState.AddModelError(string.Empty, "Account not confirmed. Check your email for confirmation instructions.");
+                    var result = await _userHelper.ChangePasswordAsync(user, model.OldPassword, model.NewPassword);
+                    if (result.Succeeded)
+                    {
+                        return RedirectToAction(nameof(ChangeUser));
+                    }
+                    else
+                    {
+                        ModelState.AddModelError(string.Empty, result.Errors.FirstOrDefault()?.Description ?? "Error changing password.");
+                    }
+                }
                 else
-                    ModelState.AddModelError(string.Empty, "Login not allowed. Contact support.");
-            }
-            else if (result.RequiresTwoFactor)
-            {
-                ModelState.AddModelError(string.Empty, "Two-factor authentication required. Complete 2FA to continue.");
-            }
-            else
-            {
-                ModelState.AddModelError(string.Empty, "Invalid username or password.");
+                {
+                    ModelState.AddModelError(string.Empty, "User not found.");
+                }
             }
 
             return View(model);

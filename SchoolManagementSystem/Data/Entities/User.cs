@@ -7,11 +7,11 @@ namespace SchoolManagementSystem.Data.Entities
     {
         [Required(ErrorMessage = "The field {0} is required.")]
         [MaxLength(50, ErrorMessage = "The field {0} can only contain {1} characters.")]
-        public string FirstName { get; set; }
+        public string? FirstName { get; set; }
 
         [Required(ErrorMessage = "The field {0} is required.")]
         [MaxLength(50, ErrorMessage = "The field {0} can only contain {1} characters.")]
-        public string LastName { get; set; }
+        public string? LastName { get; set; }
 
         [MaxLength(100, ErrorMessage = "The field {0} can only contain {1} characters.")]
         public string? Address { get; set; }

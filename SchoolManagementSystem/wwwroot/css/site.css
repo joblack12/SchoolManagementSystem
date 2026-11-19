@@ -20,3 +20,70 @@ html {
 body {
   margin-bottom: 60px;
 }
+
+/* Background wrapper layout style */
+.auth-bg-screen {
+    background-image: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('/images/register-bg.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Semi-transparent container card to keep text and forms readable */
+.auth-glass-card {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(5px);
+    border-radius: 8px;
+    padding: 2.5rem;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Container Layout: Applied to the main body on the register page */
+body:has(h2:contains("Register")),
+main[role="main"]:has(form[id="registerForm"]) {
+    background-image: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.55)), url('/images/register-bg.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    min-height: 100vh;
+    margin: 0;
+    padding: 2rem 0;
+}
+
+/* Glass card transformation for the register form column */
+main[role="main"] .row:has(#registerForm) {
+    justify-content: center;
+    padding-top: 2rem;
+}
+
+/* Wrap the Identity form in a clean, legible card */
+main[role="main"] #registerForm {
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(4px);
+    border-radius: 12px;
+    padding: 2.5rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* Make titles match the clean styling theme */
+main[role="main"] h2,
+main[role="main"] h4 {
+    color: #333333;
+    text-align: center;
+}
+
+/* Optional: Clean up or completely hide the external authentication section if unused */
+main[role="main"] .col-md-offset-2,
+main[role="main"] section:has(h4:contains("Use another service")) {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
