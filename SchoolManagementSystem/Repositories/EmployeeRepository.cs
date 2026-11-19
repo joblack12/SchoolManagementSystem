@@ -78,8 +78,7 @@ namespace SchoolManagementSystem.Repositories
                 .Where(e => !string.IsNullOrEmpty(e.FirstName) &&
                             !string.IsNullOrEmpty(e.LastName) &&
                             !string.IsNullOrEmpty(e.PhoneNumber) &&
-                            e.HireDate != null &&
-                            e.Department != null)
+                            e.HireDate != null)
                 .ToListAsync();
         }
 
