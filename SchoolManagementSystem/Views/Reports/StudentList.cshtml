@@ -1,0 +1,86 @@
+﻿@model IEnumerable<SchoolManagementSystem.Data.Entities.Student>
+@{
+    ViewData["Title"] = "Student Reports Directory";
+    Layout = "~/Views/Shared/_Dashboard.cshtml";
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0">Student Academic Reports</h4>
+            <small class="text-muted">Select a student to view or print their official report card</small>
+        </div>
+        <div style="width: 280px;">
+            <input type="text" id="studentSearch" class="form-control" placeholder="Search by name or class..." />
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="studentsReportTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Admission No</th>
+                            <th>Student Name</th>
+                            <th>School Class</th>
+                            <th>Status</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Any())
+                        {
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">
+                                    No students found in the system.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            foreach (var student in Model)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@($"ADM-{student.Id:D4}")</td>
+                                    <td>@student.FirstName @student.LastName</td>
+                                    <td>@(student.SchoolClass?.ClassName ?? "Unassigned")</td>
+                                    <td>
+                                        <span class="badge bg-info text-dark">@student.Status</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <a asp-controller="Reports"
+                                           asp-action="ReportCard"
+                                           asp-route-studentId="@student.Id"
+                                           class="btn btn-sm btn-primary">
+                                            <i class="fas fa-file-alt me-1"></i> View Report Card
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const searchInput = document.getElementById('studentSearch');
+        if (searchInput instanceof HTMLInputElement) {
+            searchInput.addEventListener('keyup', function () {
+                const filter = searchInput.value.toLowerCase();
+                const rows = document.querySelectorAll('#studentsReportTable tbody tr');
+
+                rows.forEach(function (row) {
+                    if (row instanceof HTMLElement) {
+                        const text = (row.textContent || '').toLowerCase();
+                        row.style.display = text.includes(filter) ? '' : 'none';
+                    }
+                });
+            });
+        }
+    </script>
+}

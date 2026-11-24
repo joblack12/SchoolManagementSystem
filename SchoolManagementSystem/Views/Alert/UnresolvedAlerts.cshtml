@@ -8,6 +8,8 @@
 
 <h2>Unresolved Alerts</h2>
 
+@Html.AntiForgeryToken()
+
 <table class="table">
     <thead>
         <tr>
@@ -31,33 +33,40 @@
 </table>
 
 @section Scripts {
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://jsdelivr.net"></script>
     <script>
-        function markAsResolved(alertId) {
-            Swal.fire({
+        function markAsResolved(alertId = 0) {
+            const swal = Reflect.get(window, 'Swal');
+
+            swal.fire({
                 title: 'Are you sure?',
                 text: "You want to mark this alert as resolved!",
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonText: 'Yes, resolve it!',
-                cancelButtonText: 'No, cancel!',
-            }).then((result) => {
+                cancelButtonText: 'No, cancel!'
+            }).then(function (result = { isConfirmed: false }) {
                 if (result.isConfirmed) {
+                    var token = $('input[name="__RequestVerificationToken"]').val();
+
                     $.ajax({
                         url: '@Url.Action("MarkAsResolved", "Alert")',
                         type: 'POST',
-                        data: { id: alertId },
+                        data: {
+                            id: alertId,
+                            __RequestVerificationToken: token
+                        },
                         success: function () {
-                            Swal.fire(
+                            swal.fire(
                                 'Resolved!',
                                 'The alert has been marked as resolved.',
                                 'success'
-                            ).then(() => {
-                                location.reload(); // Reload page to update the list
+                            ).then(function () {
+                                location.reload();
                             });
                         },
                         error: function () {
-                            Swal.fire(
+                            swal.fire(
                                 'Error!',
                                 'There was a problem resolving the alert.',
                                 'error'
@@ -69,3 +78,6 @@
         }
     </script>
 }
+
+
+

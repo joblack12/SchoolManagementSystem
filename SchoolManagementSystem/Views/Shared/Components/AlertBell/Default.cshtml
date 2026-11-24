@@ -1,0 +1,55 @@
+﻿@model IEnumerable<SchoolManagementSystem.Data.Entities.Alert>
+@{
+    int count = ViewBag.UnreadCount ?? 0;
+    string targetAction = User.IsInRole("Admin") ? "UnresolvedAlerts" : "ViewAlerts";
+}
+
+<li class="nav-item dropdown">
+    <a class="nav-link position-relative" href="#" id="alertBellDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="System Alerts">
+        <i class="fas fa-bell fa-lg"></i>
+        @if (count > 0)
+        {
+            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                @count
+            </span>
+        }
+    </a>
+    <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="alertBellDropdown" style="width: 320px;">
+        <li class="dropdown-header fw-bold d-flex justify-content-between align-items-center">
+            <span>System Alerts</span>
+            <span class="badge bg-secondary">@count Unresolved</span>
+        </li>
+        <li><hr class="dropdown-divider" /></li>
+        @if (!Model.Any())
+        {
+            <li class="px-3 py-2 text-muted small">No unresolved alerts.</li>
+        }
+        else
+        {
+            foreach (var alert in Model)
+            {
+                <li>
+                    <a class="dropdown-item text-wrap small py-2"
+                       asp-area=""
+                       asp-controller="Alert"
+                       asp-action="@targetAction">
+                        <div class="fw-semibold text-dark">@alert.Message</div>
+                        <small class="text-muted">
+                            @(alert.Employee != null ? $"{alert.Employee.FirstName} {alert.Employee.LastName} • " : "")
+                            @alert.CreatedAt.ToLocalTime().ToString("dd MMM, HH:mm")
+                        </small>
+                    </a>
+                </li>
+            }
+        }
+        <li><hr class="dropdown-divider" /></li>
+        <li>
+            <a class="dropdown-item text-center text-primary small fw-semibold"
+               asp-area=""
+               asp-controller="Alert"
+               asp-action="@targetAction">
+                View All Alerts
+            </a>
+        </li>
+    </ul>
+</li>

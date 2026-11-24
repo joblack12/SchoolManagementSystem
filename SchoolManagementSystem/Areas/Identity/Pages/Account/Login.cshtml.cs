@@ -19,11 +19,16 @@ namespace SchoolManagementSystem.Areas.Identity.Pages.Account
     public class LoginModel : PageModel
     {
         private readonly SignInManager<User> _signInManager;
+        private readonly UserManager<User> _userManager;
         private readonly ILogger<LoginModel> _logger;
 
-        public LoginModel(SignInManager<User> signInManager, ILogger<LoginModel> logger)
+        public LoginModel(
+            SignInManager<User> signInManager,
+            UserManager<User> userManager,
+            ILogger<LoginModel> logger)
         {
             _signInManager = signInManager;
+            _userManager = userManager;
             _logger = logger;
         }
 
@@ -79,6 +84,33 @@ namespace SchoolManagementSystem.Areas.Identity.Pages.Account
                 if (result.Succeeded)
                 {
                     _logger.LogInformation("User logged in.");
+
+                    if (!string.IsNullOrEmpty(returnUrl) && returnUrl != "/" && Url.IsLocalUrl(returnUrl))
+                    {
+                        return LocalRedirect(returnUrl);
+                    }
+
+                    var user = await _userManager.FindByEmailAsync(Input.Email);
+                    if (user != null)
+                    {
+                        if (await _userManager.IsInRoleAsync(user, "Admin"))
+                        {
+                            return RedirectToAction("AdminDashboard", "Dashboard", new { area = "" });
+                        }
+                        if (await _userManager.IsInRoleAsync(user, "Employee"))
+                        {
+                            return RedirectToAction("EmployeeDashboard", "Dashboard", new { area = "" });
+                        }
+                        if (await _userManager.IsInRoleAsync(user, "Teacher"))
+                        {
+                            return RedirectToAction("TeacherDashboard", "Dashboard", new { area = "" });
+                        }
+                        if (await _userManager.IsInRoleAsync(user, "Student"))
+                        {
+                            return RedirectToAction("StudentDashboard", "Dashboard", new { area = "" });
+                        }
+                    }
+
                     return LocalRedirect(returnUrl);
                 }
                 if (result.RequiresTwoFactor)

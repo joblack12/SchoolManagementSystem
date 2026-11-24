@@ -7,10 +7,10 @@
 @model IEnumerable<SchoolManagementSystem.Models.StudentSubjectGradeViewModel>
 
 @{
-    ViewBag.Title = $"{Model.First().StudentName}'s Grades"; // Using student's name for the title
+    ViewBag.Title = $"{Model.FirstOrDefault()?.StudentName ?? "Student"}'s Grades"; // Using student's name for the title
 }
 
-<h2>Subjects and Grades of @Model.First().StudentName</h2> <!-- Displaying the student's name -->
+<h2>Subjects and Grades of @(Model.FirstOrDefault()?.StudentName ?? "Student")</h2> <!-- Displaying the student's name -->
 
 <table class="table table-striped">
     <thead>

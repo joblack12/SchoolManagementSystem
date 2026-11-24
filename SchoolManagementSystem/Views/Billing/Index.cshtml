@@ -1,0 +1,126 @@
+﻿@model IEnumerable<SchoolManagementSystem.Data.Entities.FeeInvoice>
+@{
+    ViewData["Title"] = "Fee Billing & Invoices";
+    Layout = "~/Views/Shared/_Dashboard.cshtml";
+
+    decimal totalBilled = Model.Sum(i => i.TotalAmount);
+    decimal totalCollected = Model.Sum(i => i.AmountPaid);
+    decimal totalOutstanding = Model.Sum(i => i.Balance);
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+        <h4 class="mb-0">Fee Billing & Invoices</h4>
+        <small class="text-muted">Manage student fee invoices, track balances, and record payments</small>
+    </div>
+    <a asp-action="CreateInvoice" class="btn btn-primary">
+        <i class="fas fa-plus me-1"></i> Issue New Invoice
+    </a>
+</div>
+
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-0">Fee Billing & Invoices</h4>
+            <small class="text-muted">Manage student fee invoices, track balances, and record payments</small>
+        </div>
+        <a asp-action="CreateInvoice" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i> Issue New Invoice
+        </a>
+    </div>
+
+    <!-- Financial Summary Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-start border-primary border-4">
+                <div class="card-body">
+                    <small class="text-muted text-uppercase fw-bold">Total Billed</small>
+                    <h4 class="fw-bold mb-0 mt-1">KES @totalBilled.ToString("N2")</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-start border-success border-4">
+                <div class="card-body">
+                    <small class="text-muted text-uppercase fw-bold">Total Collected</small>
+                    <h4 class="fw-bold text-success mb-0 mt-1">KES @totalCollected.ToString("N2")</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-start border-danger border-4">
+                <div class="card-body">
+                    <small class="text-muted text-uppercase fw-bold">Outstanding Balance</small>
+                    <h4 class="fw-bold text-danger mb-0 mt-1">KES @totalOutstanding.ToString("N2")</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invoices Table -->
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Invoice #</th>
+                            <th>Student</th>
+                            <th>Description</th>
+                            <th class="text-end">Total (KES)</th>
+                            <th class="text-end">Paid (KES)</th>
+                            <th class="text-end">Balance (KES)</th>
+                            <th class="text-center">Due Date</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Any())
+                        {
+                            <tr>
+                                <td colspan="9" class="text-center text-muted py-4">
+                                    No fee invoices have been issued yet.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            foreach (var inv in Model)
+                            {
+                                var badgeClass = inv.Status switch
+                                {
+                                    "Paid" => "bg-success",
+                                    "Overdue" => "bg-danger",
+                                    _ => "bg-warning text-dark"
+                                };
+
+                                <tr>
+                                    <td class="fw-semibold">@($"INV-{inv.Id:D5}")</td>
+                                    <td>@inv.Student?.FirstName @inv.Student?.LastName</td>
+                                    <td>@inv.Title</td>
+                                    <td class="text-end">@inv.TotalAmount.ToString("N2")</td>
+                                    <td class="text-end text-success">@inv.AmountPaid.ToString("N2")</td>
+                                    <td class="text-end fw-bold">@inv.Balance.ToString("N2")</td>
+                                    <td class="text-center">@inv.DueDate.ToString("dd MMM yyyy")</td>
+                                    <td class="text-center">
+                                        <span class="badge @badgeClass">@inv.Status</span>
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        <a asp-action="Statement"
+                                           asp-route-studentId="@inv.StudentId"
+                                           class="btn btn-sm btn-outline-primary">
+                                            Statement / Pay
+                                        </a>
+                                    </td>
+
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

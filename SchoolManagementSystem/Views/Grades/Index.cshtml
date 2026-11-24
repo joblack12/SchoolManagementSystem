@@ -1,21 +1,23 @@
-﻿@{
-    Layout = "_Dashboard";
-    ViewBag.PageTitle = "Grade";
-    ViewBag.SubPageTitle = "Index";
-}
+﻿@model IEnumerable<SchoolManagementSystem.Models.StudentGradeAverageViewModel>
 
-@model IEnumerable<SchoolManagementSystem.Models.StudentGradeAverageViewModel>
+@{
+    Layout = "_Dashboard";
+    ViewBag.PageTitle = "Grades";
+    ViewBag.SubPageTitle = "List";
+}
 
 <h2>Grades List</h2>
 
-<form asp-action="Index" method="get" class="form-inline mb-3">
+<form id="filterGradesClassForm" asp-action="Index" method="get" class="form-inline mb-3">
     <div class="form-group">
         <label for="SchoolClassId" class="mr-2">Select Class:</label>
         <select id="SchoolClassId" name="classId" class="form-control mr-2">
             <option value="">-- Select Class --</option>
             @foreach (var schoolClass in ViewBag.Classes)
             {
-                <option value="@schoolClass.Value">@schoolClass.Text</option>
+                <option value="@schoolClass.Value" selected="@(Context.Request.Query["classId"] == schoolClass.Value ? "selected" : null)">
+                    @schoolClass.Text
+                </option>
             }
         </select>
         <input type="submit" value="Filter" class="btn btn-primary" />
@@ -34,14 +36,14 @@
             </tr>
         </thead>
         <tbody>
-            @foreach (var student in Model)
+            @foreach (var item in Model)
             {
                 <tr>
-                    <td>@student.Student.FirstName @student.Student.LastName</td>
-                    <td>@student.AverageGrade.ToString("F2")</td> 
-                    <td>@student.Status</td> 
+                    <td>@item.Student.FirstName @item.Student.LastName</td>
+                    <td>@item.AverageGrade.ToString("F2")</td>
+                    <td>@item.Status</td>
                     <td>
-                        <a class="btn btn-info btn-sm" asp-action="Details" asp-route-studentId="@student.Student.Id">Details</a>
+                        <a class="btn btn-info btn-sm" asp-action="Details" asp-route-studentId="@item.Student.Id">Details</a>
                     </td>
                 </tr>
             }
@@ -51,4 +53,12 @@
 else
 {
     <div class="alert alert-info">Please select a class to see the students and their grades.</div>
+}
+
+@section Scripts {
+    <script>
+        document.getElementById("SchoolClassId")?.addEventListener("change", function () {
+            document.forms.namedItem("filterGradesClassForm")?.submit();
+        });
+    </script>
 }

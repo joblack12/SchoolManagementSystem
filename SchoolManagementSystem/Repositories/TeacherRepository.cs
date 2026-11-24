@@ -56,11 +56,9 @@ namespace SchoolManagementSystem.Repositories
 
             if (teacher != null)
             {
-                // Clears current subjects
                 teacher.TeacherSubjects.Clear();
 
-                // Adds new subjects
-                foreach (var subjectId in subjectIds)
+                foreach (var subjectId in (subjectIds ?? Enumerable.Empty<int>()).Distinct())
                 {
                     teacher.TeacherSubjects.Add(new TeacherSubject { TeacherId = teacherId, SubjectId = subjectId });
                 }
@@ -78,11 +76,9 @@ namespace SchoolManagementSystem.Repositories
 
             if (teacher != null)
             {
-                // Clears current classes
                 teacher.TeacherSchoolClasses.Clear();
 
-                // Adds new classes
-                foreach (var schoolClassId in schoolClassIds)
+                foreach (var schoolClassId in (schoolClassIds ?? Enumerable.Empty<int>()).Distinct())
                 {
                     teacher.TeacherSchoolClasses.Add(new TeacherSchoolClass { TeacherId = teacherId, SchoolClassId = schoolClassId });
                 }
@@ -90,6 +86,7 @@ namespace SchoolManagementSystem.Repositories
                 await _context.SaveChangesAsync();
             }
         }
+
 
         // Retrieves teachers by status
         public async Task<IEnumerable<Teacher>> GetTeachersByStatusAsync(TeacherStatus status)

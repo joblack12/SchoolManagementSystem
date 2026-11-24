@@ -14,9 +14,14 @@ namespace SchoolManagementSystem.Controllers
             _alertRepository = alertRepository;
         }
 
-        public async Task<IActionResult> Index()
+        public IActionResult Index()
         {
-            return View();
+            if (User.IsInRole("Admin")) return RedirectToAction(nameof(AdminDashboard));
+            if (User.IsInRole("Employee")) return RedirectToAction(nameof(EmployeeDashboard));
+            if (User.IsInRole("Teacher")) return RedirectToAction(nameof(TeacherDashboard));
+            if (User.IsInRole("Student")) return RedirectToAction(nameof(StudentDashboard));
+
+            return RedirectToAction("Index", "Home");
         }
 
         [Authorize(Roles = "Admin")] 

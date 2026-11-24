@@ -157,9 +157,9 @@ namespace SchoolManagementSystem
 
                         logger.LogInformation("Attempting to connect and migrate database (Attempt {Retry} of {Max})...", retryCount, maxRetries);
 
-                        if (context.Database.GetPendingMigrations().Any())
+                        if ((await context.Database.GetPendingMigrationsAsync()).Any())
                         {
-                            context.Database.Migrate();
+                            await context.Database.MigrateAsync();
                         }
 
                         var seeder = services.GetRequiredService<SeedDb>();
@@ -168,18 +168,26 @@ namespace SchoolManagementSystem
                         databaseReady = true;
                         logger.LogInformation("Database migration and seeding completed successfully.");
                     }
-                    catch (SqlException ex) when (ex.Number == -2 || ex.Message.Contains("Timeout"))
+                    catch (SqlException ex)
                     {
-                        logger.LogWarning("SQL Server is still booting up. Waiting 10 seconds before retrying...");
+                        logger.LogWarning("SQL Server is not ready yet (Error {Number}): {Message}. Waiting 10 seconds before retry {Retry}/{Max}...",
+                            ex.Number, ex.Message, retryCount, maxRetries);
                         await Task.Delay(TimeSpan.FromSeconds(10));
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "An error occurred while migrating or seeding the database.");
+                        logger.LogError(ex, "An unexpected error occurred while migrating or seeding the database (Attempt {Retry}/{Max}).", retryCount, maxRetries);
                         await Task.Delay(TimeSpan.FromSeconds(10));
                     }
                 }
+
+                if (!databaseReady)
+                {
+                    logger.LogCritical("Could not connect to or migrate the database after {Max} attempts. Shutting down.", maxRetries);
+                    throw new InvalidOperationException("Database migration and seeding failed after maximum retries.");
+                }
             }
+
 
             // Ensure this block does NOT force loops during local container orchestration
             if (!app.Environment.IsDevelopment())

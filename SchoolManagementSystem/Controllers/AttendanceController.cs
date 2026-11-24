@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SchoolManagementSystem.Data.Entities;
 using SchoolManagementSystem.Helpers;
@@ -15,12 +14,13 @@ using System.Threading.Tasks;
 
 namespace SchoolManagementSystem.Controllers
 {
-
+    [Authorize]
     public class AttendanceController : Controller
     {
         private readonly IAttendanceRepository _attendanceRepository;
         private readonly IStudentRepository _studentRepository;
         private readonly ISubjectRepository _subjectRepository;
+        private readonly ITeacherRepository _teacherRepository;
         private readonly IConverterHelper _converterHelper;
         private readonly ISchoolClassRepository _schoolClassRepository;
         private readonly ILogger<AttendanceController> _logger;
@@ -29,6 +29,7 @@ namespace SchoolManagementSystem.Controllers
             IAttendanceRepository attendanceRepository,
             IStudentRepository studentRepository,
             ISubjectRepository subjectRepository,
+            ITeacherRepository teacherRepository,
             IConverterHelper converterHelper,
             ISchoolClassRepository schoolClassRepository,
             ILogger<AttendanceController> logger)
@@ -36,16 +37,67 @@ namespace SchoolManagementSystem.Controllers
             _attendanceRepository = attendanceRepository;
             _studentRepository = studentRepository;
             _subjectRepository = subjectRepository;
+            _teacherRepository = teacherRepository;
             _converterHelper = converterHelper;
             _schoolClassRepository = schoolClassRepository;
             _logger = logger;
         }
 
+        private async Task<Teacher?> GetCurrentTeacherWithDetailsAsync()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return null;
+
+            var teacher = await _teacherRepository.GetTeacherByUserIdAsync(userId);
+            if (teacher == null) return null;
+
+            return await _teacherRepository.GetTeacherWithDetailsAsync(teacher.Id);
+        }
+
+        private async Task<bool> CanAccessStudentAndSubjectAsync(Student student, int? subjectId = null)
+        {
+            if (User.IsInRole("Admin") || User.IsInRole("Employee")) return true;
+
+            if (User.IsInRole("Teacher"))
+            {
+                var teacher = await GetCurrentTeacherWithDetailsAsync();
+                if (teacher == null || student.SchoolClassId == null) return false;
+
+                bool teachesClass = teacher.TeacherSchoolClasses.Any(tsc => tsc.SchoolClassId == student.SchoolClassId.Value);
+                if (!teachesClass) return false;
+
+                if (subjectId.HasValue)
+                {
+                    bool teachesSubject = teacher.TeacherSubjects.Any(ts => ts.SubjectId == subjectId.Value);
+                    if (!teachesSubject) return false;
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        [Authorize(Roles = "Employee,Admin,Teacher")]
         public async Task<IActionResult> Index(int? classId)
         {
             try
             {
                 var schoolClasses = await _schoolClassRepository.GetAllAsync();
+
+                // Scope dropdown classes for Teachers
+                if (User.IsInRole("Teacher") && !User.IsInRole("Admin") && !User.IsInRole("Employee"))
+                {
+                    var teacher = await GetCurrentTeacherWithDetailsAsync();
+                    var allowedClassIds = teacher?.TeacherSchoolClasses.Select(tsc => tsc.SchoolClassId).ToHashSet() ?? new HashSet<int>();
+                    schoolClasses = schoolClasses.Where(sc => allowedClassIds.Contains(sc.Id)).ToList();
+
+                    if (classId.HasValue && !allowedClassIds.Contains(classId.Value))
+                    {
+                        return Forbid();
+                    }
+                }
+
                 ViewBag.Classes = schoolClasses.Select(sc => new SelectListItem
                 {
                     Value = sc.Id.ToString(),
@@ -59,19 +111,15 @@ namespace SchoolManagementSystem.Controllers
 
                     foreach (var student in students)
                     {
-                        // Get only the subjects in which the student is enrolled
                         var subjectsForStudent = await _subjectRepository.GetSubjectsByStudentIdAsync(student.Id);
-
-                        // Calculate the total number of classes by adding only the classes from the student's subjects
                         int totalClasses = subjectsForStudent.Sum(s => s.TotalClasses);
-
                         var attendances = await _attendanceRepository.GetAttendancesByStudentIdAsync(student.Id);
 
                         studentAttendances.Add(new StudentAttendanceViewModel
                         {
                             Student = student,
                             Attendances = attendances,
-                            TotalClasses = totalClasses // Defines TotalClasses only with subjects associated with the student
+                            TotalClasses = totalClasses
                         });
                     }
 
@@ -88,21 +136,27 @@ namespace SchoolManagementSystem.Controllers
             }
         }
 
-
         // GET: Attendance/Details/5
-        [Authorize(Roles = "Employee,Admin")]
+        [Authorize(Roles = "Employee,Admin,Teacher")]
         public async Task<IActionResult> Details(int studentId, int classId)
         {
             try
             {
                 var student = await _studentRepository.GetByIdAsync(studentId);
-                if (student == null)
-                {
-                    return new NotFoundViewResult("StudentNotFound");
-                }
+                if (student == null) return new NotFoundViewResult("StudentNotFound");
+
+                if (!await CanAccessStudentAndSubjectAsync(student)) return Forbid();
 
                 var subjects = await _attendanceRepository.GetSubjectsByStudentIdAsync(studentId);
                 var attendances = await _attendanceRepository.GetAttendancesByStudentIdAsync(studentId);
+
+                // Filter subjects if user is strictly a Teacher
+                if (User.IsInRole("Teacher") && !User.IsInRole("Admin") && !User.IsInRole("Employee"))
+                {
+                    var teacher = await GetCurrentTeacherWithDetailsAsync();
+                    var allowedSubjectIds = teacher?.TeacherSubjects.Select(ts => ts.SubjectId).ToHashSet() ?? new HashSet<int>();
+                    subjects = subjects.Where(s => allowedSubjectIds.Contains(s.Id)).ToList();
+                }
 
                 var model = subjects.Select(subject => new StudentSubjectAttendanceViewModel
                 {
@@ -114,7 +168,7 @@ namespace SchoolManagementSystem.Controllers
                     CanAddAttendance = (attendances.Count(a => a.SubjectId == subject.Id) < subject.TotalClasses)
                 }).ToList();
 
-                ViewBag.ClassId = classId;
+                ViewBag.ClassId = classId != 0 ? classId : (student.SchoolClassId ?? 0);
                 return View(model);
             }
             catch (Exception ex)
@@ -125,9 +179,8 @@ namespace SchoolManagementSystem.Controllers
             }
         }
 
-
         // GET: Attendance/AddAttendance
-        [Authorize(Roles = "Employee,Admin")]
+        [Authorize(Roles = "Employee,Admin,Teacher")]
         public async Task<IActionResult> AddAttendance(int studentId, int subjectId)
         {
             try
@@ -140,12 +193,15 @@ namespace SchoolManagementSystem.Controllers
                     return new NotFoundViewResult("StudentOrSubjectNotFound");
                 }
 
+                if (!await CanAccessStudentAndSubjectAsync(student, subjectId)) return Forbid();
+
                 var model = new AttendanceViewModel
                 {
                     StudentId = studentId,
                     SubjectId = subjectId,
                     StudentName = $"{student.FirstName} {student.LastName}",
-                    SubjectName = subject.Name
+                    SubjectName = subject.Name,
+                    Date = DateTime.Today
                 };
 
                 return View(model);
@@ -159,7 +215,7 @@ namespace SchoolManagementSystem.Controllers
         }
 
         // POST: Attendance/AddAttendance
-        [Authorize(Roles = "Employee,Admin")]
+        [Authorize(Roles = "Employee,Admin,Teacher")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AddAttendance(AttendanceViewModel model)
@@ -168,9 +224,34 @@ namespace SchoolManagementSystem.Controllers
             {
                 try
                 {
+                    var student = await _studentRepository.GetByIdAsync(model.StudentId);
+                    var subject = await _subjectRepository.GetByIdAsync(model.SubjectId);
+                    if (student == null || subject == null)
+                        if (student == null || subject == null)
+                        {
+                            return new NotFoundViewResult("StudentOrSubjectNotFound");
+                        }
+
+                    if (!await CanAccessStudentAndSubjectAsync(student, model.SubjectId)) return Forbid();
+
+                    // Verify student is enrolled in this subject and hasn't reached TotalClasses cap
+                    var enrolledSubjects = await _subjectRepository.GetSubjectsByStudentIdAsync(model.StudentId);
+                    if (!enrolledSubjects.Any(s => s.Id == model.SubjectId))
+                    {
+                        ModelState.AddModelError(string.Empty, "The student is not enrolled in this subject.");
+                        return View(model);
+                    }
+
+                    var existingAttendances = await _attendanceRepository.GetAttendancesByStudentIdAsync(model.StudentId);
+                    if (existingAttendances.Count(a => a.SubjectId == model.SubjectId) >= subject.TotalClasses)
+                    {
+                        ModelState.AddModelError(string.Empty, $"Cannot record more absences than total classes ({subject.TotalClasses}).");
+                        return View(model);
+                    }
+
                     var attendance = await _converterHelper.ToAttendanceAsync(model, true);
                     await _attendanceRepository.AddAttendanceAsync(attendance);
-                    return RedirectToAction(nameof(Details), new { studentId = model.StudentId });
+                    return RedirectToAction(nameof(Details), new { studentId = model.StudentId, classId = student.SchoolClassId ?? 0 });
                 }
                 catch (Exception ex)
                 {
@@ -183,16 +264,16 @@ namespace SchoolManagementSystem.Controllers
         }
 
         // GET: Attendance/EditAttendance/5
-        [Authorize(Roles = "Employee,Admin")]
+        [Authorize(Roles = "Employee,Admin,Teacher")]
         public async Task<IActionResult> EditAttendance(int id)
         {
             try
             {
                 var attendance = await _attendanceRepository.GetAttendanceWithDetailsByIdAsync(id);
-                if (attendance == null)
-                {
-                    return new NotFoundViewResult("AttendanceNotFound");
-                }
+                if (attendance == null) return new NotFoundViewResult("AttendanceNotFound");
+
+                var student = await _studentRepository.GetByIdAsync(attendance.StudentId);
+                if (student == null || !await CanAccessStudentAndSubjectAsync(student, attendance.SubjectId)) return Forbid();
 
                 var model = _converterHelper.ToAttendanceViewModel(attendance);
                 return View(model);
@@ -206,7 +287,7 @@ namespace SchoolManagementSystem.Controllers
         }
 
         // POST: Attendance/EditAttendance
-        [Authorize(Roles = "Employee,Admin")]
+        [Authorize(Roles = "Employee,Admin,Teacher")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> EditAttendance(AttendanceViewModel model)
@@ -215,9 +296,19 @@ namespace SchoolManagementSystem.Controllers
             {
                 try
                 {
+                    var existingAttendance = await _attendanceRepository.GetByIdAsync(model.Id);
+                    if (existingAttendance == null) return new NotFoundViewResult("AttendanceNotFound");
+
+                    var student = await _studentRepository.GetByIdAsync(existingAttendance.StudentId);
+                    if (student == null || !await CanAccessStudentAndSubjectAsync(student, existingAttendance.SubjectId)) return Forbid();
+
+                    // Lock StudentId and SubjectId to existing record to prevent ID tampering
+                    model.StudentId = existingAttendance.StudentId;
+                    model.SubjectId = existingAttendance.SubjectId;
+
                     var attendance = await _converterHelper.ToAttendanceAsync(model, false);
                     await _attendanceRepository.UpdateAsync(attendance);
-                    return RedirectToAction(nameof(Details), new { studentId = model.StudentId });
+                    return RedirectToAction(nameof(Details), new { studentId = existingAttendance.StudentId, classId = student.SchoolClassId ?? 0 });
                 }
                 catch (Exception ex)
                 {
@@ -230,16 +321,16 @@ namespace SchoolManagementSystem.Controllers
         }
 
         // GET: Attendance/DeleteAttendance/5
-        [Authorize(Roles = "Employee,Admin")]
+        [Authorize(Roles = "Employee,Admin,Teacher")]
         public async Task<IActionResult> DeleteAttendance(int id)
         {
             try
             {
                 var attendance = await _attendanceRepository.GetAttendanceWithDetailsByIdAsync(id);
-                if (attendance == null)
-                {
-                    return new NotFoundViewResult("AttendanceNotFound");
-                }
+                if (attendance == null) return new NotFoundViewResult("AttendanceNotFound");
+
+                var student = await _studentRepository.GetByIdAsync(attendance.StudentId);
+                if (student == null || !await CanAccessStudentAndSubjectAsync(student, attendance.SubjectId)) return Forbid();
 
                 return View(_converterHelper.ToAttendanceViewModel(attendance));
             }
@@ -252,7 +343,7 @@ namespace SchoolManagementSystem.Controllers
         }
 
         // POST: Attendance/DeleteAttendance
-        [Authorize(Roles = "Employee,Admin")]
+        [Authorize(Roles = "Employee,Admin,Teacher")]
         [HttpPost, ActionName("DeleteAttendance")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAttendanceConfirmed(int id)
@@ -262,8 +353,12 @@ namespace SchoolManagementSystem.Controllers
                 var attendance = await _attendanceRepository.GetAttendanceWithDetailsByIdAsync(id);
                 if (attendance != null)
                 {
+                    var student = await _studentRepository.GetByIdAsync(attendance.StudentId);
+                    if (student == null || !await CanAccessStudentAndSubjectAsync(student, attendance.SubjectId)) return Forbid();
+
                     await _attendanceRepository.DeleteAsync(attendance);
                 }
+
                 return RedirectToAction(nameof(Index));
             }
             catch (Exception ex)
@@ -288,19 +383,14 @@ namespace SchoolManagementSystem.Controllers
                     return new NotFoundViewResult("StudentNotFound");
                 }
 
-                // Get the student's subjects and their absences
                 var subjects = await _subjectRepository.GetSubjectsByStudentIdAsync(studentId.Value);
                 var attendances = await _attendanceRepository.GetAttendancesByStudentIdAsync(studentId.Value);
                 var student = await _studentRepository.GetByIdAsync(studentId.Value);
 
-                // Calculate total classes and total absences
                 int totalClasses = subjects.Sum(s => s.TotalClasses);
                 int totalAbsences = attendances.Count;
-
-                // Determine overall attendance status based on absences
                 string overallStatus = totalAbsences >= totalClasses * 0.3 ? "Failed" : "Passed";
 
-                // Prepare the model for each subject
                 var model = subjects.Select(subject => new StudentSubjectAttendanceViewModel
                 {
                     Subject = subject,
@@ -309,7 +399,6 @@ namespace SchoolManagementSystem.Controllers
                     StudentName = $"{student.FirstName} {student.LastName}"
                 }).ToList();
 
-                // Pass the total number of absences and the general status to the ViewBag
                 ViewBag.TotalClasses = totalClasses;
                 ViewBag.TotalAbsences = totalAbsences;
                 ViewBag.OverallAttendanceStatus = overallStatus;
@@ -324,20 +413,8 @@ namespace SchoolManagementSystem.Controllers
             }
         }
 
-
-        public IActionResult StudentNotFound()
-        {
-            return View();
-        }
-
-        public IActionResult AttendanceNotFound()
-        {
-            return View();
-        }
-
-        public IActionResult StudentOrSubjectNotFound()
-        {
-            return View();
-        }
+        public IActionResult StudentNotFound() => View();
+        public IActionResult AttendanceNotFound() => View();
+        public IActionResult StudentOrSubjectNotFound() => View();
     }
 }

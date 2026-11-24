@@ -13,7 +13,6 @@ using Microsoft.AspNetCore.Authorization;
 namespace SchoolManagementSystem.Controllers
 {
     [Authorize(Roles = "Employee,Admin")]
-
     public class StudentsController : Controller
     {
         private readonly IStudentRepository _studentRepository;
@@ -21,7 +20,7 @@ namespace SchoolManagementSystem.Controllers
         private readonly IConverterHelper _converterHelper;
         private readonly ISchoolClassRepository _schoolClassRepository;
         private readonly IUserHelper _userHelper;
-        private readonly ILogger<StudentsController> _logger; // Inject ILogger
+        private readonly ILogger<StudentsController> _logger;
 
         public StudentsController(
             IStudentRepository studentRepository,
@@ -29,21 +28,21 @@ namespace SchoolManagementSystem.Controllers
             IConverterHelper converterHelper,
             ISchoolClassRepository schoolClassRepository,
             IUserHelper userHelper,
-            ILogger<StudentsController> logger) // Inject ILogger
+            ILogger<StudentsController> logger)
         {
             _studentRepository = studentRepository;
             _blobHelper = blobHelper;
             _converterHelper = converterHelper;
             _schoolClassRepository = schoolClassRepository;
             _userHelper = userHelper;
-            _logger = logger; // Assign the ILogger to the local field
+            _logger = logger;
         }
 
         // GET: Students
         public async Task<IActionResult> Index()
         {
             var students = await _studentRepository.GetAllWithIncludesAsync();
-            return View(students); // Pass the Student list directly to the view
+            return View(students);
         }
 
         // GET: Students/Details/5
@@ -63,10 +62,9 @@ namespace SchoolManagementSystem.Controllers
         {
             var pendingUsers = await _userHelper.GetAllUsersInRoleAsync("Pending");
 
-            // Initialize the ViewModel with the list of pending users
             var model = new StudentViewModel
             {
-                PendingUsers = pendingUsers // Populates the PendingUsers property
+                PendingUsers = pendingUsers
             };
 
             ViewBag.PendingUsers = new SelectList(pendingUsers, "Id", "Email");
@@ -80,8 +78,21 @@ namespace SchoolManagementSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(StudentViewModel model)
         {
+            var pendingUsers = await _userHelper.GetAllUsersInRoleAsync("Pending");
+
             if (ModelState.IsValid)
             {
+                // Verify target UserId is strictly in the Pending role
+                var user = pendingUsers.FirstOrDefault(u => u.Id == model.UserId);
+                if (user == null)
+                {
+                    ModelState.AddModelError(nameof(model.UserId), "The selected user is invalid or is no longer pending approval.");
+                    model.PendingUsers = pendingUsers;
+                    ViewBag.PendingUsers = new SelectList(pendingUsers, "Id", "Email");
+                    await LoadDropdownData();
+                    return View(model);
+                }
+
                 // Checks if the selected SchoolClass has an associated CourseId
                 if (model.SchoolClassId.HasValue)
                 {
@@ -90,10 +101,10 @@ namespace SchoolManagementSystem.Controllers
                     {
                         TempData["ErrorMessage"] = "The selected school class does not have an associated course.";
                         ModelState.AddModelError("SchoolClassId", "The selected school class does not have an associated course.");
-                        await LoadDropdownData();
-                        var pendingUsers = await _userHelper.GetAllUsersInRoleAsync("Pending");
+                        model.PendingUsers = pendingUsers;
                         ViewBag.PendingUsers = new SelectList(pendingUsers, "Id", "Email");
-                        return View(model);  // Returns the view with the current state of the model to keep the data filled
+                        await LoadDropdownData();
+                        return View(model);
                     }
                 }
 
@@ -108,29 +119,30 @@ namespace SchoolManagementSystem.Controllers
                     var student = await _converterHelper.ToStudentAsync(model, imageId, true);
                     await _studentRepository.CreateAsync(student);
 
-                    // Update the user from the "Pending" role to "Student"
-                    var user = await _userHelper.GetUserByIdAsync(model.UserId);
                     await _userHelper.RemoveUserFromRoleAsync(user, "Pending");
                     await _userHelper.AddUserToRoleAsync(user, "Student");
 
                     TempData["SuccessMessage"] = "Student created successfully.";
                     return RedirectToAction(nameof(Index));
                 }
+                catch (InvalidOperationException ex)
+                {
+                    ModelState.AddModelError(nameof(model.ImageFile), ex.Message);
+                }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error creating student");
+                    _logger.LogError(ex, "Error creating student"); // or "Error updating student" in Edit
                     ModelState.AddModelError("", "An unexpected error occurred. Please try again.");
                 }
+
             }
 
             // Reload dropdowns in case of error
-            var updatedPendingUsers = await _userHelper.GetAllUsersInRoleAsync("Pending");
-            ViewBag.PendingUsers = new SelectList(updatedPendingUsers, "Id", "Email");
+            model.PendingUsers = pendingUsers;
+            ViewBag.PendingUsers = new SelectList(pendingUsers, "Id", "Email");
             await LoadDropdownData();
             return View(model);
         }
-
-
 
         // GET: Students/Edit/5
         public async Task<IActionResult> Edit(int? id)
@@ -140,10 +152,7 @@ namespace SchoolManagementSystem.Controllers
             var student = await _studentRepository.GetByIdAsync(id.Value);
             if (student == null) return new NotFoundViewResult("StudentNotFound");
 
-            // Converts Student entity to StudentViewModel
             var model = _converterHelper.ToStudentViewModel(student);
-
-            // Load the list of classes to the dropdown
             await LoadDropdownData();
 
             return View(model);
@@ -156,9 +165,14 @@ namespace SchoolManagementSystem.Controllers
         {
             if (id != model.Id) return new NotFoundViewResult("StudentNotFound");
 
+            var existingStudent = await _studentRepository.GetByIdAsync(id);
+            if (existingStudent == null) return new NotFoundViewResult("StudentNotFound");
+
+            // Lock UserId to the trusted database entity to prevent UserId tampering
+            model.UserId = existingStudent.UserId;
+
             if (ModelState.IsValid)
             {
-                // Verifica se a SchoolClass selecionada possui um CourseId associado
                 if (model.SchoolClassId.HasValue)
                 {
                     var schoolClass = await _schoolClassRepository.GetByIdAsync(model.SchoolClassId.Value);
@@ -167,28 +181,24 @@ namespace SchoolManagementSystem.Controllers
                         TempData["ErrorMessage"] = "The selected school class does not have an associated course.";
                         ModelState.AddModelError("SchoolClassId", "The selected school class does not have an associated course.");
                         await LoadDropdownData();
-                        var pendingUsers = await _userHelper.GetAllUsersInRoleAsync("Pending");
-                        ViewBag.PendingUsers = new SelectList(pendingUsers, "Id", "Email");
-                        return View(model);  // Retorna a view com o estado atual do modelo para manter os dados preenchidos
+                        return View(model);
                     }
                 }
 
                 try
                 {
-                    Guid imageId = model.ImageId; // Use existing image
+                    Guid imageId = existingStudent.ImageId;
 
-                    // Checks if a new image has been loaded
                     if (model.ImageFile != null && model.ImageFile.Length > 0)
                     {
                         imageId = await _blobHelper.UploadBlobAsync(model.ImageFile, "students");
                     }
 
-                    // Convert to Student entity
                     var student = await _converterHelper.ToStudentAsync(model, imageId, false);
                     await _studentRepository.UpdateAsync(student);
 
-                    // Update associated user data
-                    var user = await _userHelper.GetUserByIdAsync(model.UserId);
+                    // Update associated user data using trusted existingStudent.UserId
+                    var user = await _userHelper.GetUserByIdAsync(existingStudent.UserId);
                     if (user != null)
                     {
                         user.FirstName = model.FirstName;
@@ -204,33 +214,31 @@ namespace SchoolManagementSystem.Controllers
                     if (!await StudentExists(model.Id)) return new NotFoundViewResult("StudentNotFound");
                     throw;
                 }
+                catch (InvalidOperationException ex)
+                {
+                    ModelState.AddModelError(nameof(model.ImageFile), ex.Message);
+                }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error updating student");
+                    _logger.LogError(ex, "Error creating student"); // or "Error updating student" in Edit
                     ModelState.AddModelError("", "An unexpected error occurred. Please try again.");
                 }
             }
 
-            // Reload dropdowns in case of error
-            var updatedPendingUsers = await _userHelper.GetAllUsersInRoleAsync("Pending");
-            ViewBag.PendingUsers = new SelectList(updatedPendingUsers, "Id", "Email");
             await LoadDropdownData();
             return View(model);
         }
-
 
         // GET: Students/Delete/5
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null) return new NotFoundViewResult("StudentNotFound");
 
-            var student = await _studentRepository.GetStudentWithCoursesAsync(id.Value); 
-
+            var student = await _studentRepository.GetStudentWithCoursesAsync(id.Value);
             if (student == null) return new NotFoundViewResult("StudentNotFound");
 
             return View(_converterHelper.ToStudentViewModel(student));
         }
-
 
         // POST: Students/Delete/5
         [HttpPost, ActionName("Delete")]
@@ -238,7 +246,6 @@ namespace SchoolManagementSystem.Controllers
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var student = await _studentRepository.GetByIdAsync(id);
-
             if (student == null) return new NotFoundViewResult("StudentNotFound");
 
             try
@@ -248,10 +255,12 @@ namespace SchoolManagementSystem.Controllers
             }
             catch (DbUpdateException ex)
             {
+                ViewBag.ErrorTitle = $"{student.FirstName} {student.LastName} cannot be deleted";
+                ViewBag.ErrorMessage = "This student cannot be deleted because they have associated records (such as grades or attendance).";
+
                 if (ex.InnerException != null && ex.InnerException.Message.Contains("DELETE"))
                 {
-                    ViewBag.ErrorTitle = $"{student.Id} está a ser usado!";
-                    ViewBag.ErrorMessage = $"Este estudante não pode ser apagado. Tente apagar primeiro as associações.";
+                    ViewBag.ErrorTitle = $"{student.FirstName} {student.LastName} is currently in use!";
                 }
 
                 return View("Error");
@@ -263,13 +272,11 @@ namespace SchoolManagementSystem.Controllers
             return await _studentRepository.ExistAsync(id);
         }
 
-        // Load the list of classes to the dropdown
         private async Task LoadDropdownData()
         {
             var schoolClasses = await _schoolClassRepository.GetAllAsync();
             var classList = schoolClasses.ToList();
 
-            // Load existing classes
             ViewBag.SchoolClassId = new SelectList(classList, "Id", "ClassName");
         }
 
@@ -277,6 +284,5 @@ namespace SchoolManagementSystem.Controllers
         {
             return View();
         }
-
     }
 }

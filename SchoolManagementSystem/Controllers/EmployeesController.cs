@@ -60,10 +60,9 @@ namespace SchoolManagementSystem.Controllers
         {
             var pendingUsers = await _userHelper.GetAllUsersInRoleAsync("Pending");
 
-            // Initialize the ViewModel with the list of pending users
             var model = new EmployeeViewModel
             {
-                PendingUsers = pendingUsers // Populates the PendingUsers property
+                PendingUsers = pendingUsers
             };
 
             ViewBag.PendingUsers = new SelectList(pendingUsers, "Id", "Email");
@@ -76,40 +75,51 @@ namespace SchoolManagementSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(EmployeeViewModel model)
         {
+            var pendingUsers = await _userHelper.GetAllUsersInRoleAsync("Pending");
+
             if (ModelState.IsValid)
             {
+                // Verify target UserId is strictly in the Pending role
+                var user = pendingUsers.FirstOrDefault(u => u.Id == model.UserId);
+                if (user == null)
+                {
+                    ModelState.AddModelError(nameof(model.UserId), "The selected user is invalid or is no longer pending approval.");
+                    model.PendingUsers = pendingUsers;
+                    ViewBag.PendingUsers = new SelectList(pendingUsers, "Id", "Email");
+                    return View(model);
+                }
+
                 try
                 {
                     Guid imageId = Guid.Empty;
 
-                    
                     if (model.ImageFile != null && model.ImageFile.Length > 0)
                     {
                         imageId = await _blobHelper.UploadBlobAsync(model.ImageFile, "employees");
                     }
 
-                    
                     var employee = await _converterHelper.ToEmployeeAsync(model, imageId, true);
-
-                   
                     await _employeeRepository.CreateAsync(employee);
 
-     
-                    var user = await _userHelper.GetUserByIdAsync(model.UserId);
                     await _userHelper.RemoveUserFromRoleAsync(user, "Pending");
                     await _userHelper.AddUserToRoleAsync(user, "Employee");
 
                     return RedirectToAction(nameof(Index));
                 }
+                catch (InvalidOperationException ex)
+                {
+                    ModelState.AddModelError(nameof(model.ImageFile), ex.Message);
+                }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error creating employee");
+                    _logger.LogError(ex, "Error creating employee"); // or "Error updating employee" in Edit
                     ModelState.AddModelError("", "An unexpected error occurred. Please try again.");
                 }
+
             }
 
             // Reload dropdowns in case of error
-            var pendingUsers = await _userHelper.GetAllUsersInRoleAsync("Pending");
+            model.PendingUsers = pendingUsers;
             ViewBag.PendingUsers = new SelectList(pendingUsers, "Id", "Email");
 
             return View(model);
@@ -134,13 +144,18 @@ namespace SchoolManagementSystem.Controllers
         {
             if (id != model.Id) return new NotFoundViewResult("EmployeeNotFound");
 
+            var existingEmployee = await _employeeRepository.GetByIdAsync(id);
+            if (existingEmployee == null) return new NotFoundViewResult("EmployeeNotFound");
+
+            // Lock UserId to the trusted database entity
+            model.UserId = existingEmployee.UserId;
+
             if (ModelState.IsValid)
             {
                 try
                 {
-                    Guid imageId = model.ImageId; 
+                    Guid imageId = existingEmployee.ImageId;
 
- 
                     if (model.ImageFile != null && model.ImageFile.Length > 0)
                     {
                         imageId = await _blobHelper.UploadBlobAsync(model.ImageFile, "employees");
@@ -149,8 +164,8 @@ namespace SchoolManagementSystem.Controllers
                     var employee = await _converterHelper.ToEmployeeAsync(model, imageId, false);
                     await _employeeRepository.UpdateAsync(employee);
 
-                    // Update associated user data
-                    var user = await _userHelper.GetUserByIdAsync(model.UserId);
+                    // Update associated user data using trusted existingEmployee.UserId
+                    var user = await _userHelper.GetUserByIdAsync(existingEmployee.UserId);
                     if (user != null)
                     {
                         user.FirstName = model.FirstName;
@@ -165,9 +180,13 @@ namespace SchoolManagementSystem.Controllers
                     if (!await EmployeeExists(model.Id)) return new NotFoundViewResult("EmployeeNotFound");
                     throw;
                 }
+                catch (InvalidOperationException ex)
+                {
+                    ModelState.AddModelError(nameof(model.ImageFile), ex.Message);
+                }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error updating employee");
+                    _logger.LogError(ex, "Error creating employee"); // or "Error updating employee" in Edit
                     ModelState.AddModelError("", "An unexpected error occurred. Please try again.");
                 }
             }
@@ -201,10 +220,12 @@ namespace SchoolManagementSystem.Controllers
             }
             catch (DbUpdateException ex)
             {
+                ViewBag.ErrorTitle = $"{employee.FirstName} {employee.LastName} cannot be deleted";
+                ViewBag.ErrorMessage = "This employee cannot be deleted because they have associated records. Please delete associations first.";
+
                 if (ex.InnerException != null && ex.InnerException.Message.Contains("DELETE"))
                 {
-                    ViewBag.ErrorTitle = $"{employee.Id} is being used!";
-                    ViewBag.ErrorMessage = "This employee cannot be deleted. Please delete associations first.";
+                    ViewBag.ErrorTitle = $"{employee.FirstName} {employee.LastName} is being used!";
                 }
 
                 return View("Error");

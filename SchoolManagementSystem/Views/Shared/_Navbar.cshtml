@@ -50,105 +50,112 @@
 
                     <li class="nav-item">
                         <a class="nav-link"
-                           asp-area="Identity"
-                           asp-page="/Account/Register">
+                           asp-area=""
+                           asp-controller="Account"
+                           asp-action="Register">
                             Register Member
                         </a>
                     </li>
-                }
-                else if (User.IsInRole("Employee"))
-                {
-                    <li class="nav-item">
-                        <a class="nav-link"
-                           asp-area=""
-                           asp-controller="Dashboard"
-                           asp-action="EmployeeDashboard">
-                            Dashboard
-                        </a>
-                    </li>
-                }
-                else if (User.IsInRole("Teacher"))
-                {
-                    <li class="nav-item">
-                        <a class="nav-link"
-                           asp-area=""
-                           asp-controller="Dashboard"
-                           asp-action="TeacherDashboard">
-                            Dashboard
-                        </a>
-                    </li>
-                }
-                else if (User.IsInRole("Student"))
-                {
-                    <li class="nav-item">
-                        <a class="nav-link"
-                           asp-area=""
-                           asp-controller="Dashboard"
-                           asp-action="StudentDashboard">
-                            Dashboard
-                        </a>
-                    </li>
-                }
 
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle"
-                       href="#"
-                       id="navbarAccount"
-                       role="button"
-                       data-bs-toggle="dropdown"
-                       aria-expanded="false">
-                        Account
-                    </a>
-
-                    <ul class="dropdown-menu" aria-labelledby="navbarAccount">
-                        <li>
-                            <a class="dropdown-item"
-                               asp-area=""
-                               asp-controller="Account"
-                               asp-action="ChangeUser">
-                                Profile
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item"
-                               asp-area=""
-                               asp-controller="Account"
-                               asp-action="ChangePassword">
-                                Change Password
-                            </a>
-                        </li>
-                        <li>
-                            <form asp-area=""
-                                  asp-controller="Account"
-                                  asp-action="Logout"
-                                  method="post">
-                                <button type="submit"
-                                        class="dropdown-item">
-                                    Logout
-                                </button>
-                            </form>
-                        </li>
-                    </ul>
-                </li>
             }
-            else
+            else if (User.IsInRole("Employee"))
             {
                 <li class="nav-item">
                     <a class="nav-link"
-                       asp-area="Identity"
-                       asp-page="/Account/Register">
-                        Register
-                    </a>
-                </li>
-
-                <li class="nav-item">
-                    <a class="nav-link"
-                       asp-area="Identity"
-                       asp-page="/Account/Login">
-                        Login
+                       asp-area=""
+                       asp-controller="Dashboard"
+                       asp-action="EmployeeDashboard">
+                        Dashboard
                     </a>
                 </li>
             }
-        </ul>
-    </div>
+            else if (User.IsInRole("Teacher"))
+            {
+                <li class="nav-item">
+                    <a class="nav-link"
+                       asp-area=""
+                       asp-controller="Dashboard"
+                       asp-action="TeacherDashboard">
+                        Dashboard
+                    </a>
+                </li>
+            }
+            else if (User.IsInRole("Student"))
+            {
+                <li class="nav-item">
+                    <a class="nav-link"
+                       asp-area=""
+                       asp-controller="Dashboard"
+                       asp-action="StudentDashboard">
+                        Dashboard
+                    </a>
+                </li>
+            }
+
+            <!-- System Alerts Bell Badge -->
+            @await Component.InvokeAsync("AlertBell")
+
+            <li class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle"
+                   href="#"
+                   id="navbarAccount"
+                   role="button"
+                   data-bs-toggle="dropdown"
+                   aria-expanded="false">
+                    Account
+                </a>
+
+                <ul class="dropdown-menu" aria-labelledby="navbarAccount">
+                    <li>
+                        <a class="dropdown-item"
+                           asp-area=""
+                           asp-controller="Account"
+                           asp-action="ChangeUser">
+                            Profile
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item"
+                           asp-area=""
+                           asp-controller="Account"
+                           asp-action="ChangePassword">
+                            Change Password
+                        </a>
+                    </li>
+                    <li>
+                        <form asp-area=""
+                              asp-controller="Account"
+                              asp-action="Logout"
+                              method="post">
+                            <button type="submit"
+                                    class="dropdown-item">
+                                Logout
+                            </button>
+                        </form>
+                    </li>
+                </ul>
+            </li>
+        }
+            else
+        {
+            <li class="nav-item">
+                <a class="nav-link"
+                   asp-area=""
+                   asp-controller="Account"
+                   asp-action="Register">
+                    Register
+                </a>
+            </li>
+
+            <li class="nav-item">
+                <a class="nav-link"
+                   asp-area=""
+                   asp-controller="Account"
+                   asp-action="Login">
+                    Login
+                </a>
+            </li>
+        }
+    </ul>
+</div>
 </nav>

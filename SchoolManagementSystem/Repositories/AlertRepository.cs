@@ -26,8 +26,12 @@ namespace SchoolManagementSystem.Repositories
             return await _context.Alerts
                                  .Where(a => !a.IsResolved)
                                  .Include(a => a.Employee)
+                                 .Include(a => a.User)
+                                 .OrderByDescending(a => a.CreatedAt)
                                  .ToListAsync();
         }
+
+
 
         public async Task<Alert> GetAlertByIdAsync(int id)
         {

@@ -81,30 +81,39 @@ namespace SchoolManagementSystem.Helpers
             var user = await _userHelper.GetUserByIdAsync(model.UserId);
             if (user == null) throw new Exception("User not found");
 
-            return new Teacher
+            var teacher = new Teacher
             {
                 Id = isNew ? 0 : model.Id,
-                UserId = user.Id, // Uses the correct UserId
+                UserId = user.Id,
                 FirstName = model.FirstName,
                 LastName = model.LastName,
                 AcademicDegree = model.AcademicDegree,
                 HireDate = model.HireDate,
                 Status = model.Status,
-                ImageId = imageId,
-
-                // Creating associations for TeacherSchoolClass and TeacherSubject
-                TeacherSchoolClasses = model.SchoolClassIds.Select(id => new TeacherSchoolClass
-                {
-                    SchoolClassId = id // Here, should use the key from the junction table if it has one
-                }).ToList(),
-
-                TeacherSubjects = model.SubjectIds.Select(subjectId => new TeacherSubject
-                {
-                    TeacherId = isNew ? 0 : model.Id, // The Teacher's ID must be set
-                    SubjectId = subjectId
-                }).ToList()
+                ImageId = imageId
             };
+
+            if (isNew)
+            {
+                teacher.TeacherSchoolClasses = (model.SchoolClassIds ?? new List<int>())
+                    .Distinct()
+                    .Select(id => new TeacherSchoolClass
+                    {
+                        SchoolClassId = id
+                    }).ToList();
+
+                teacher.TeacherSubjects = (model.SubjectIds ?? new List<int>())
+                    .Distinct()
+                    .Select(subjectId => new TeacherSubject
+                    {
+                        SubjectId = subjectId
+                    }).ToList();
+            }
+
+            return teacher;
         }
+
+
 
         // Conversion from Teacher to TeacherViewModel
         public TeacherViewModel ToTeacherViewModel(Teacher teacher)

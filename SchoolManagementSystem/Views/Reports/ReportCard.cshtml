@@ -1,0 +1,171 @@
+﻿@model SchoolManagementSystem.ViewModels.StudentReportCardViewModel
+@{
+    ViewData["Title"] = "Academic Report Card";
+    Layout = "~/Views/Shared/_Dashboard.cshtml";
+}
+
+<style>
+    @@media print {
+        .main-sidebar, .main-header, .no-print, footer {
+            display: none !important;
+        }
+
+        .content-wrapper {
+            margin-left: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+        }
+
+        #report-sheet {
+            border: 2px solid #000 !important;
+            box-shadow: none !important;
+            margin: 0 !important;
+            padding: 20px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+
+        .table-responsive {
+            overflow: visible !important;
+        }
+
+        .badge {
+            border: 1px solid #000 !important;
+            color: #000 !important;
+            background: transparent !important;
+        }
+    }
+
+    .transcript-box {
+        background: #ffffff;
+        color: #212529;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 35px;
+        max-width: 850px;
+        margin: 20px auto;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    }
+
+    @@media (max-width: 576px) {
+        .transcript-box {
+            padding: 18px;
+        }
+    }
+</style>
+
+<div class="container-fluid py-3">
+    <!-- Action Toolbar (Hidden when printing) -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 no-print" style="max-width: 850px; margin: 0 auto;">
+        <h4 class="mb-0">Student Academic Report Card</h4>
+        <div class="d-flex flex-wrap gap-2">
+            @if (User.IsInRole("Admin") || User.IsInRole("Teacher"))
+            {
+                <a asp-action="StudentList" class="btn btn-outline-secondary">
+                    <i class="fas fa-users me-1"></i> All Students
+                </a>
+            }
+            <button type="button" onclick="window.print()" class="btn btn-primary">
+                <i class="fas fa-print me-1"></i> Print / Save as PDF
+            </button>
+        </div>
+    </div>
+
+    <!-- Printable Transcript Sheet -->
+    <div id="report-sheet" class="transcript-box">
+        <!-- School Header -->
+        <div class="text-center border-bottom pb-3 mb-4">
+            <h2 class="fw-bold text-uppercase mb-1">Official Academic Report Card</h2>
+            <p class="text-muted mb-0">Academic Year @Model.AcademicYear &bull; @Model.Term</p>
+        </div>
+
+        <!-- Student Bio Metadata -->
+        <div class="row mb-4">
+            <div class="col-12 col-sm-6 mb-2 mb-sm-0">
+                <p class="mb-1"><strong>Student Name:</strong> @Model.FullName</p>
+                <p class="mb-0"><strong>Admission No:</strong> @Model.AdmissionNumber</p>
+            </div>
+            <div class="col-12 col-sm-6 text-sm-end">
+                <p class="mb-1"><strong>Class / Course:</strong> @Model.ClassName (@Model.CourseName)</p>
+                <p class="mb-0"><strong>Date Issued:</strong> @DateTime.Now.ToString("dd MMM yyyy")</p>
+            </div>
+        </div>
+
+        <!-- Grades Table -->
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Code</th>
+                        <th>Subject</th>
+                        <th class="text-center">Credits</th>
+                        <th class="text-center">Score (/20)</th>
+                        <th class="text-center">Grade</th>
+                        <th class="text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Subjects.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                No grades recorded for this student yet.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var item in Model.Subjects)
+                        {
+                            <tr>
+                                <td>@item.SubjectCode</td>
+                                <td>@item.SubjectName</td>
+                                <td class="text-center">@item.Credits</td>
+                                <td class="text-center">@item.Score.ToString("0.00")</td>
+                                <td class="text-center">@item.Grade</td>
+                                <td class="text-center">
+                                    <span class="badge @(item.Status == "Passed" ? "bg-success" : "bg-danger")">
+                                        @item.Status
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+                <tfoot class="table-light fw-bold">
+                    <tr>
+                        <td colspan="2" class="text-end">Overall Summary:</td>
+                        <td class="text-center">@Model.TotalCredits</td>
+                        <td class="text-center">@Model.MeanScore.ToString("0.00") / 20</td>
+                        <td class="text-center text-primary">@Model.OverallGrade</td>
+                        <td class="text-center">
+                            <span class="badge @(Model.OverallStatus == "Passed" ? "bg-success" : "bg-danger")">
+                                @Model.OverallStatus
+                            </span>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <!-- Teacher Remarks -->
+        <div class="mt-4 p-3 bg-light rounded border">
+            <p class="mb-1"><strong>Class Teacher's Remarks:</strong></p>
+            <p class="mb-0 fst-italic">@Model.TeacherRemarks</p>
+        </div>
+
+        <!-- Signature Lines -->
+        <div class="row mt-5 pt-4">
+            <div class="col-12 col-sm-6 mb-4 mb-sm-0">
+                <div class="border-top border-dark pt-1" style="max-width: 220px;">
+                    <small>Class Teacher Signature</small>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 text-sm-end">
+                <div class="border-top border-dark pt-1 ms-sm-auto" style="max-width: 220px;">
+                    <small>Principal / Official Stamp</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

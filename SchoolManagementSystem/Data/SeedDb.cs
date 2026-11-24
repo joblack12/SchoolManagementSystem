@@ -17,10 +17,12 @@ public class SeedDb
         await _context.Database.EnsureCreatedAsync();
 
         // Create roles and users
+        // Ensure all core application roles exist on startup
         await _userHelper.CheckRoleAsync("Admin");
-        await _userHelper.CheckRoleAsync("Student");
-        await _userHelper.CheckRoleAsync("Teacher");
         await _userHelper.CheckRoleAsync("Employee");
+        await _userHelper.CheckRoleAsync("Teacher");
+        await _userHelper.CheckRoleAsync("Student");
+        await _userHelper.CheckRoleAsync("Pending");
 
         // Create users
         var adminUser = await CreateUserAsync("admin@school.com", "Admin", "User", "Admin123!", "Admin");

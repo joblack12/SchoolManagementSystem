@@ -50,6 +50,24 @@
         <ul class="sidebar-menu">
             <!-- Home -->
             <li><a href="/Home/Index" aria-label="Home"><i class="fas fa-home me-2"></i>Home</a></li>
+
+            <!-- Role Dashboard Shortcut -->
+            @if (User.IsInRole("Admin"))
+            {
+                <li><a href="@Url.Action("AdminDashboard", "Dashboard", new { area = "" })"><i class="fas fa-tachometer-alt me-2"></i>Dashboard</a></li>
+            }
+            else if (User.IsInRole("Employee"))
+            {
+                <li><a href="@Url.Action("EmployeeDashboard", "Dashboard", new { area = "" })"><i class="fas fa-tachometer-alt me-2"></i>Dashboard</a></li>
+            }
+            else if (User.IsInRole("Teacher"))
+            {
+                <li><a href="@Url.Action("TeacherDashboard", "Dashboard", new { area = "" })"><i class="fas fa-tachometer-alt me-2"></i>Dashboard</a></li>
+            }
+            else if (User.IsInRole("Student"))
+            {
+                <li><a href="@Url.Action("StudentDashboard", "Dashboard", new { area = "" })"><i class="fas fa-tachometer-alt me-2"></i>Dashboard</a></li>
+            }
             
             <!-- Account -->
             @if (User.IsInRole("Admin"))
@@ -81,7 +99,7 @@
                 </li>
             }
 
-            <!-- Students Grades and Attendance-->
+            <!-- Students -->
             @if (User.IsInRole("Employee") || User.IsInRole("Admin"))
             {
                 <li>
@@ -90,6 +108,11 @@
                         <li><a href="/Students/Index" aria-label="View Students">View Students</a></li>
                     </ul>
                 </li>
+            }
+
+            <!-- Grades and Attendance (Employee, Admin, and Teacher) -->
+            @if (User.IsInRole("Employee") || User.IsInRole("Admin") || User.IsInRole("Teacher"))
+            {
                 <li>
                     <a href="/Grades/Index" aria-label="Grades" data-toggle="submenu"><i class="fas fa-graduation-cap me-2"></i>Grades</a>
                     <ul class="submenu">
@@ -104,16 +127,53 @@
                 </li>
             }
 
-            <!-- Student grades and absences -->
+            <!-- Student Grades and Attendances -->
             @if (User.IsInRole("Student"))
             {
                 <li>
-                    <a href="/Grades/MyGrades" aria-label="My Grades"><i class="fas fa-book-reader me-2"></i>My Grades</a>
+                    <a href="/Grades/MyGrades" aria-label="My Grades"><i class="fas fa-graduation-cap me-2"></i>My Grades</a>
                 </li>
                 <li>
-                    <a href="/Attendance/MyAttendances" aria-label="My Attendances"><i class="fas fa-book-reader me-2"></i>My Attendances</a>
+                    <a href="/Attendance/MyAttendances" aria-label="My Attendances"><i class="fas fa-calendar-check me-2"></i>My Attendances</a>
                 </li>
             }
+
+            <!-- Academic Reports & Transcripts -->
+            @if (User.IsInRole("Admin") || User.IsInRole("Employee") || User.IsInRole("Teacher"))
+            {
+                <li>
+                    <a href="@Url.Action("StudentList", "Reports", new { area = "" })" aria-label="Student Reports">
+                        <i class="fas fa-file-alt me-2"></i>Student Reports
+                    </a>
+                </li>
+            }
+            @if (User.IsInRole("Student"))
+            {
+                <li>
+                    <a href="@Url.Action("ReportCard", "Reports", new { area = "" })" aria-label="My Report Card">
+                        <i class="fas fa-file-alt me-2"></i>My Report Card
+                    </a>
+                </li>
+            }
+
+            <!-- Fee Billing & Statements -->
+            @if (User.IsInRole("Admin") || User.IsInRole("Employee"))
+            {
+                <li>
+                    <a href="@Url.Action("Index", "Billing", new { area = "" })">
+                        <i class="fas fa-file-invoice-dollar me-2"></i>Fee Billing
+                    </a>
+                </li>
+            }
+            @if (User.IsInRole("Student"))
+            {
+                <li>
+                    <a href="@Url.Action("Statement", "Billing", new { area = "" })">
+                        <i class="fas fa-file-invoice-dollar me-2"></i>My Fee Statement
+                    </a>
+                </li>
+            }
+
 
             @if (User.IsInRole("Admin"))
             {
@@ -139,17 +199,18 @@
 
 
             <!-- Alerts -->
-            @if (User.IsInRole("Employee"))
+            @if (User.IsInRole("Employee") || User.IsInRole("Teacher"))
             {
-                <li><a href="@Url.Action("Create", "Alert")"><i class="fas fa-exclamation-circle me-2"></i>Create Alert</a></li>
-                <li><a href="@Url.Action("ViewAlerts", "Alert")"><i class="fas fa-exclamation-triangle me-2"></i>View Alerts</a></li>
+                <li><a href="@Url.Action("Create", "Alert", new { area = "" })"><i class="fas fa-exclamation-circle me-2"></i>Create Alert</a></li>
+                <li><a href="@Url.Action("ViewAlerts", "Alert", new { area = "" })"><i class="fas fa-exclamation-triangle me-2"></i>View Alerts</a></li>
             }
+
 
             @if (User.IsInRole("Admin"))
             {
-                <li><a href="@Url.Action("UnresolvedAlerts", "Alert")" aria-label="Manage Alerts"><i class="fas fa-exclamation-triangle me-2"></i>Manage Alerts</a></li>
+                <li><a href="@Url.Action("UnresolvedAlerts", "Alert", new { area = "" })" aria-label="Manage Alerts"><i class="fas fa-exclamation-triangle me-2"></i>Manage Alerts</a></li>
             }
-
+        </ul>
     </aside>
 
     <!-- Content Wrapper -->
@@ -176,26 +237,27 @@
                 string dashboardLink = "";
                 if (User.IsInRole("Admin"))
                 {
-                    dashboardLink = Url.Action("AdminDashboard", "Dashboard");
+                    dashboardLink = Url.Action("AdminDashboard", "Dashboard", new { area = "" });
                 }
                 else if (User.IsInRole("Employee"))
                 {
-                    dashboardLink = Url.Action("EmployeeDashboard", "Dashboard");
+                    dashboardLink = Url.Action("EmployeeDashboard", "Dashboard", new { area = "" });
                 }
                 else if (User.IsInRole("Teacher"))
                 {
-                    dashboardLink = Url.Action("TeacherDashboard", "Dashboard");
+                    dashboardLink = Url.Action("TeacherDashboard", "Dashboard", new { area = "" });
                 }
                 else if (User.IsInRole("Student"))
                 {
-                    dashboardLink = Url.Action("StudentDashboard", "Dashboard");
+                    dashboardLink = Url.Action("StudentDashboard", "Dashboard", new { area = "" });
                 }
                 else
                 {
-                    dashboardLink = Url.Action("Index", "Home");
+                    dashboardLink = Url.Action("Index", "Home", new { area = "" });
                 }
             }
             <a href="@dashboardLink">Dashboard</a>
+  
 
             @if (ViewBag.PageTitle != null)
             {

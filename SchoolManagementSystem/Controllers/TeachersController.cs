@@ -29,7 +29,7 @@ namespace SchoolManagementSystem.Controllers
             ISchoolClassRepository schoolClassRepository,
             IBlobHelper blobHelper,
             IConverterHelper converterHelper,
-            IUserHelper userHelper, 
+            IUserHelper userHelper,
             ILogger<TeachersController> logger)
         {
             _teacherRepository = teacherRepository;
@@ -37,7 +37,7 @@ namespace SchoolManagementSystem.Controllers
             _schoolClassRepository = schoolClassRepository;
             _blobHelper = blobHelper;
             _converterHelper = converterHelper;
-            _userHelper = userHelper; 
+            _userHelper = userHelper;
             _logger = logger;
         }
 
@@ -72,15 +72,13 @@ namespace SchoolManagementSystem.Controllers
         {
             var pendingUsers = await _userHelper.GetAllUsersInRoleAsync("Pending");
 
-            // Initialize the ViewModel with the list of pending users
             var model = new TeacherViewModel
             {
-                PendingUsers = pendingUsers // Populates the PendingUsers property
+                PendingUsers = pendingUsers
             };
 
-            // Load subjects and classes for dropdowns
             await LoadDropdownData();
-            ViewBag.PendingUsers = new SelectList(pendingUsers, "Id", "Email"); // Populates the dropdown for pending users
+            ViewBag.PendingUsersList = new SelectList(pendingUsers, "Id", "Email");
 
             return View(model);
         }
@@ -90,45 +88,56 @@ namespace SchoolManagementSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(TeacherViewModel model)
         {
-            if (!ModelState.IsValid)
-            {
-                await LoadDropdownData(); // Reload dropdowns in case of error
-                var pendingUsers = await _userHelper.GetAllUsersInRoleAsync("Pending");
-                ViewBag.PendingUsers = new SelectList(pendingUsers, "Id", "Email");
-                return View(model); // Return the view with validation errors
-            }
+            var pendingUsers = await _userHelper.GetAllUsersInRoleAsync("Pending");
 
-            try
+            if (ModelState.IsValid)
             {
-                Guid imageId = Guid.Empty;
-
-                // Check if an image has been loaded
-                if (model.ImageFile != null && model.ImageFile.Length > 0)
+                // Verify target UserId is strictly in the Pending role
+                var user = pendingUsers.FirstOrDefault(u => u.Id == model.UserId);
+                if (user == null)
                 {
-                    imageId = await _blobHelper.UploadBlobAsync(model.ImageFile, "teachers");
+                    ModelState.AddModelError(nameof(model.UserId), "The selected user is invalid or is no longer pending approval.");
+                    await LoadDropdownData();
+                    model.PendingUsers = pendingUsers;
+                    ViewBag.PendingUsersList = new SelectList(pendingUsers, "Id", "Email");
+                    return View(model);
                 }
 
-                var teacher = await _converterHelper.ToTeacherAsync(model, imageId, true);
+                try
+                {
+                    Guid imageId = Guid.Empty;
 
-                await _teacherRepository.CreateAsync(teacher);
+                    if (model.ImageFile != null && model.ImageFile.Length > 0)
+                    {
+                        imageId = await _blobHelper.UploadBlobAsync(model.ImageFile, "teachers");
+                    }
 
-                var user = await _userHelper.GetUserByIdAsync(model.UserId);
-                await _userHelper.RemoveUserFromRoleAsync(user, "Pending");
-                await _userHelper.AddUserToRoleAsync(user, "Teacher");
+                    var teacher = await _converterHelper.ToTeacherAsync(model, imageId, true);
+                    await _teacherRepository.CreateAsync(teacher);
 
-                return RedirectToAction(nameof(Index)); // Redirect upon success
+                    await _userHelper.RemoveUserFromRoleAsync(user, "Pending");
+                    await _userHelper.AddUserToRoleAsync(user, "Teacher");
+
+                    return RedirectToAction(nameof(Index));
+                }
+                catch (InvalidOperationException ex)
+                {
+                    ModelState.AddModelError(nameof(model.ImageFile), ex.Message);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error creating teacher");
+                    ModelState.AddModelError("", "An unexpected error occurred. Please try again.");
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error creating teacher");
-                ModelState.AddModelError("", "An unexpected error occurred. Please try again.");
-            }
 
-            await LoadDropdownData();// Reload dropdowns in case of error
-            var pendingUsersReload = await _userHelper.GetAllUsersInRoleAsync("Pending");
-            ViewBag.PendingUsers = new SelectList(pendingUsersReload, "Id", "Email");
-            return View(model); // Return the view with validation errors
+            await LoadDropdownData();
+            model.PendingUsers = pendingUsers;
+            ViewBag.PendingUsersList = new SelectList(pendingUsers, "Id", "Email");
+            return View(model);
         }
+
+
 
 
         // GET: Teachers/Edit/5
@@ -160,11 +169,18 @@ namespace SchoolManagementSystem.Controllers
         {
             if (id != model.Id) return new NotFoundViewResult("TeacherNotFound");
 
+            // 1. Fetch the trusted teacher record from the database first
+            var existingTeacher = await _teacherRepository.GetByIdAsync(id);
+            if (existingTeacher == null) return new NotFoundViewResult("TeacherNotFound");
+
+            // 2. Override any client-submitted UserId with the trusted database UserId
+            model.UserId = existingTeacher.UserId;
+
             if (ModelState.IsValid)
             {
                 try
                 {
-                    Guid imageId = model.ImageId; // Use existing image
+                    Guid imageId = existingTeacher.ImageId; // Use existing trusted image
 
                     // Checks if a new image has been loaded
                     if (model.ImageFile != null && model.ImageFile.Length > 0)
@@ -175,12 +191,15 @@ namespace SchoolManagementSystem.Controllers
                     // Converts the ViewModel to the Teacher entity
                     var teacher = await _converterHelper.ToTeacherAsync(model, imageId, false);
 
+                    // Save scalar changes (Degree, HireDate, Status, ImageId)
+                    await _teacherRepository.UpdateAsync(teacher);
+
                     // Update subjects and classes
                     await _teacherRepository.UpdateTeacherSubjectsAsync(teacher.Id, model.SubjectIds);
                     await _teacherRepository.UpdateTeacherClassesAsync(teacher.Id, model.SchoolClassIds);
 
-                    // Update associated user data
-                    var user = await _userHelper.GetUserByIdAsync(model.UserId);
+                    // 3. Look up the user using the trusted existingTeacher.UserId
+                    var user = await _userHelper.GetUserByIdAsync(existingTeacher.UserId);
                     if (user != null)
                     {
                         user.FirstName = model.FirstName;
@@ -195,6 +214,10 @@ namespace SchoolManagementSystem.Controllers
                     if (!await TeacherExists(model.Id)) return new NotFoundViewResult("TeacherNotFound");
                     throw;
                 }
+                catch (InvalidOperationException ex)
+                {
+                    ModelState.AddModelError(nameof(model.ImageFile), ex.Message);
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error updating teacher");
@@ -206,6 +229,7 @@ namespace SchoolManagementSystem.Controllers
             await LoadDropdownData();
             return View(model);
         }
+
 
 
         // GET: Teachers/Delete/5
@@ -263,13 +287,13 @@ namespace SchoolManagementSystem.Controllers
             ViewBag.Subjects = subjects.Select(s => new SelectListItem
             {
                 Value = s.Id.ToString(),
-                Text = s.Name 
+                Text = s.Name
             });
 
             ViewBag.SchoolClasses = classes.Select(c => new SelectListItem
             {
                 Value = c.Id.ToString(),
-                Text = c.ClassName 
+                Text = c.ClassName
             });
         }
 

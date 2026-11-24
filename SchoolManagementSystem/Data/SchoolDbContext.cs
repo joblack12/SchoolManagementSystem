@@ -19,7 +19,9 @@ public class SchoolDbContext : IdentityDbContext<User>
     public DbSet<TeacherSubject> TeacherSubjects { get; set; }
     public DbSet<TeacherSchoolClass> TeacherSchoolClasses { get; set; }
     public DbSet<CourseSubject> CourseSubjects { get; set; }
-    
+    public DbSet<FeeInvoice> FeeInvoices { get; set; }
+    public DbSet<FeePayment> FeePayments { get; set; }
+
 
 
     public SchoolDbContext(DbContextOptions<SchoolDbContext> options) : base(options)
@@ -105,51 +107,65 @@ public class SchoolDbContext : IdentityDbContext<User>
             .WithMany(sc => sc.TeacherSchoolClasses)
             .HasForeignKey(tsc => tsc.SchoolClassId)
             .OnDelete(DeleteBehavior.Restrict); // Restriction on class exclusion
+
+        modelBuilder.Entity<Alert>()
+            .HasOne(a => a.Employee)
+            .WithMany()
+            .HasForeignKey(a => a.EmployeeId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Alert>()
+            .HasOne(a => a.User)
+            .WithMany()
+            .HasForeignKey(a => a.UserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+
     }
-        // 💡 INTERCEPTOR WORKAROUND: Catches missing form fields right before saving to SQL Server
-        public override System.Threading.Tasks.Task<int> SaveChangesAsync(
-            bool acceptAllChangesOnSuccess, 
+    // 💡 INTERCEPTOR WORKAROUND: Catches missing form fields right before saving to SQL Server
+    public override System.Threading.Tasks.Task<int> SaveChangesAsync(
+            bool acceptAllChangesOnSuccess,
             System.Threading.CancellationToken cancellationToken = default)
-        {
-            var entries = ChangeTracker.Entries()
-                .Where(e => e.Entity is SchoolManagementSystem.Data.Entities.User && 
-                           (e.State == Microsoft.EntityFrameworkCore.EntityState.Added || 
-                            e.State == Microsoft.EntityFrameworkCore.EntityState.Modified));
+    {
+        var entries = ChangeTracker.Entries()
+            .Where(e => e.Entity is SchoolManagementSystem.Data.Entities.User &&
+                       (e.State == Microsoft.EntityFrameworkCore.EntityState.Added ||
+                        e.State == Microsoft.EntityFrameworkCore.EntityState.Modified));
 
-            foreach (var entry in entries)
+        foreach (var entry in entries)
+        {
+            var user = (SchoolManagementSystem.Data.Entities.User)entry.Entity;
+
+            if (string.IsNullOrEmpty(user.FirstName))
             {
-                var user = (SchoolManagementSystem.Data.Entities.User)entry.Entity;
-                
-                if (string.IsNullOrEmpty(user.FirstName))
-                {
-                    user.FirstName = "Member"; // 💡 Forces a default string fallback to satisfy NOT NULL constraints
-                }
-                
-                if (string.IsNullOrEmpty(user.LastName))
-                {
-                    user.LastName = "User";
-                }
+                user.FirstName = "Member"; // 💡 Forces a default string fallback to satisfy NOT NULL constraints
             }
 
-            return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
-        }
-
-        // 💡 ALSO OVERRIDE SYNC SAVES TO MATCH PIPELINE EXECUTIONS
-        public override int SaveChanges(bool acceptAllChangesOnSuccess)
-        {
-            var entries = ChangeTracker.Entries()
-                .Where(e => e.Entity is SchoolManagementSystem.Data.Entities.User && 
-                           (e.State == Microsoft.EntityFrameworkCore.EntityState.Added || 
-                            e.State == Microsoft.EntityFrameworkCore.EntityState.Modified));
-
-            foreach (var entry in entries)
+            if (string.IsNullOrEmpty(user.LastName))
             {
-                var user = (SchoolManagementSystem.Data.Entities.User)entry.Entity;
-                if (string.IsNullOrEmpty(user.FirstName)) user.FirstName = "Member";
-                if (string.IsNullOrEmpty(user.LastName)) user.LastName = "User";
+                user.LastName = "User";
             }
-
-            return base.SaveChanges(acceptAllChangesOnSuccess);
         }
+
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    // 💡 ALSO OVERRIDE SYNC SAVES TO MATCH PIPELINE EXECUTIONS
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        var entries = ChangeTracker.Entries()
+            .Where(e => e.Entity is SchoolManagementSystem.Data.Entities.User &&
+                       (e.State == Microsoft.EntityFrameworkCore.EntityState.Added ||
+                        e.State == Microsoft.EntityFrameworkCore.EntityState.Modified));
+
+        foreach (var entry in entries)
+        {
+            var user = (SchoolManagementSystem.Data.Entities.User)entry.Entity;
+            if (string.IsNullOrEmpty(user.FirstName)) user.FirstName = "Member";
+            if (string.IsNullOrEmpty(user.LastName)) user.LastName = "User";
+        }
+
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
 
 }

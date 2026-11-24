@@ -28,9 +28,11 @@
     <div class="row mb-3">
         <div class="col-md-6">
             <label asp-for="UserId" class="form-label">Pending User <span class="text-danger">*</span></label>
-            <select asp-for="UserId" class="form-select" asp-items="ViewBag.PendingUsers" id="pendingUserDropdown" required>
-                <option value="">Select User</option> <!-- Default option -->
+            <select asp-for="UserId" class="form-select" asp-items="ViewBag.PendingUsersList" id="pendingUserDropdown" required>
+                <option value="">Select User</option>
             </select>
+
+
             <span asp-validation-for="UserId" class="text-danger"></span>
         </div>
         <div class="col-md-6">
@@ -92,7 +94,8 @@
         @foreach (var schoolClass in ViewBag.SchoolClasses)
         {
             <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="SchoolClassIds" value="@schoolClass.Value" id="schoolClass_@schoolClass.Value" />
+                <input class="form-check-input" type="checkbox" name="SchoolClassIds" value="@schoolClass.Value" id="schoolClass_@schoolClass.Value"
+                @(Model.SchoolClassIds.Contains(int.Parse(schoolClass.Value)) ? "checked" : "") />
                 <label class="form-check-label" for="schoolClass_@schoolClass.Value">
                     @schoolClass.Text
                 </label>
@@ -105,13 +108,15 @@
         @foreach (var subject in ViewBag.Subjects)
         {
             <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="SubjectIds" value="@subject.Value" id="subject_@subject.Value" />
+                <input class="form-check-input" type="checkbox" name="SubjectIds" value="@subject.Value" id="subject_@subject.Value"
+                @(Model.SubjectIds.Contains(int.Parse(subject.Value)) ? "checked" : "") />
                 <label class="form-check-label" for="subject_@subject.Value">
                     @subject.Text
                 </label>
             </div>
         }
     </div>
+
 
     <button type="submit" class="btn btn-primary">Create Teacher</button>
 </form>

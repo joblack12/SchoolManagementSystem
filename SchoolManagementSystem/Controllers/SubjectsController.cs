@@ -10,7 +10,6 @@ using System.Threading.Tasks;
 namespace SchoolManagementSystem.Controllers
 {
     [Authorize(Roles = "Employee,Admin")]
-
     public class SubjectsController : Controller
     {
         private readonly ISubjectRepository _subjectRepository;
@@ -22,7 +21,7 @@ namespace SchoolManagementSystem.Controllers
             _converterHelper = converterHelper;
         }
 
-        // GET: Subject/Index
+        // GET: Subjects/Index
         public async Task<IActionResult> Index()
         {
             var subjects = await _subjectRepository.GetAll().ToListAsync();
@@ -30,13 +29,13 @@ namespace SchoolManagementSystem.Controllers
             return View(subjectViewModels);
         }
 
-        // GET: Subject/Create
+        // GET: Subjects/Create
         public IActionResult Create()
         {
             return View();
         }
 
-        // POST: Subject/Create
+        // POST: Subjects/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(SubjectViewModel model)
@@ -51,10 +50,12 @@ namespace SchoolManagementSystem.Controllers
             return View(model);
         }
 
-        // GET: Subject/Edit/5
-        public async Task<IActionResult> Edit(int id)
+        // GET: Subjects/Edit/5
+        public async Task<IActionResult> Edit(int? id)
         {
-            var subject = await _subjectRepository.GetByIdAsync(id);
+            if (id == null) return new NotFoundViewResult("SubjectNotFound");
+
+            var subject = await _subjectRepository.GetByIdAsync(id.Value);
             if (subject == null)
             {
                 return new NotFoundViewResult("SubjectNotFound");
@@ -64,36 +65,55 @@ namespace SchoolManagementSystem.Controllers
             return View(model);
         }
 
-        // POST: Subject/Edit/5
+        // POST: Subjects/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(SubjectViewModel model)
+        public async Task<IActionResult> Edit(int id, SubjectViewModel model)
         {
+            if (id != model.Id) return new NotFoundViewResult("SubjectNotFound");
+
+            if (!await _subjectRepository.ExistAsync(id))
+            {
+                return new NotFoundViewResult("SubjectNotFound");
+            }
+
             if (ModelState.IsValid)
             {
-                var subject = await _converterHelper.ToSubjectAsync(model, false);
-                await _subjectRepository.UpdateAsync(subject);
-                return RedirectToAction(nameof(Index));
+                try
+                {
+                    var subject = await _converterHelper.ToSubjectAsync(model, false);
+                    await _subjectRepository.UpdateAsync(subject);
+                    return RedirectToAction(nameof(Index));
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!await _subjectRepository.ExistAsync(model.Id))
+                    {
+                        return new NotFoundViewResult("SubjectNotFound");
+                    }
+                    throw;
+                }
             }
 
             return View(model);
         }
 
-        // GET: Subject/Delete/5
-        public async Task<IActionResult> Delete(int id)
+        // GET: Subjects/Delete/5
+        public async Task<IActionResult> Delete(int? id)
         {
-            var subject = await _subjectRepository.GetByIdAsync(id);
+            if (id == null) return new NotFoundViewResult("SubjectNotFound");
+
+            var subject = await _subjectRepository.GetByIdAsync(id.Value);
             if (subject == null)
             {
                 return new NotFoundViewResult("SubjectNotFound");
             }
 
-            // Converter o Subject para SubjectViewModel
             var model = _converterHelper.ToSubjectViewModel(subject);
             return View(model);
         }
 
-        // POST: Subject/Delete/5
+        // POST: Subjects/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
@@ -111,15 +131,17 @@ namespace SchoolManagementSystem.Controllers
             }
             catch (DbUpdateException ex)
             {
+                ViewBag.ErrorTitle = $"{subject.Name} cannot be deleted";
+                ViewBag.ErrorMessage = "This subject cannot be deleted because it has associated courses, teachers, grades, or attendance records.";
+
                 if (ex.InnerException != null && ex.InnerException.Message.Contains("DELETE"))
                 {
                     ViewBag.ErrorTitle = $"{subject.Name} is being used!";
-                    ViewBag.ErrorMessage = "This subject cannot be deleted because it has associated data.";
                 }
+
                 return View("Error");
             }
         }
-
 
         public IActionResult SubjectNotFound()
         {

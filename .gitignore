@@ -372,3 +372,6 @@ keys/
 *.tar
 cookies.txt
 register.html
+.env
+backups/
+.env.prod

@@ -1,0 +1,175 @@
+﻿@model IEnumerable<SchoolManagementSystem.Data.Entities.FeeInvoice>
+@using SchoolManagementSystem.Data.Entities
+@{
+    ViewData["Title"] = "Student Fee Statement";
+    Layout = "~/Views/Shared/_Dashboard.cshtml";
+    var student = ViewBag.Student as Student;
+
+    decimal totalBilled = Model.Sum(i => i.TotalAmount);
+    decimal totalPaid = Model.Sum(i => i.AmountPaid);
+    decimal balanceDue = Model.Sum(i => i.Balance);
+}
+
+<style>
+    @@media print {
+        .main-sidebar, .main-header, .no-print, .breadcrumb, footer {
+            display: none !important;
+        }
+
+        .content-wrapper {
+            margin-left: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+        }
+
+        .table-responsive {
+            overflow: visible !important;
+        }
+
+        .card {
+            border: 1px solid #000 !important;
+            box-shadow: none !important;
+        }
+    }
+</style>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 no-print">
+        <div>
+            <h4 class="mb-0">Fee Statement: @student?.FirstName @student?.LastName</h4>
+            <small class="text-muted">Admission No: @($"ADM-{student?.Id:D4}")</small>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            @if (User.IsInRole("Admin") || User.IsInRole("Employee"))
+            {
+                <a asp-action="Index" class="btn btn-outline-secondary">All Invoices</a>
+            }
+            <button type="button" onclick="window.print()" class="btn btn-primary">
+                <i class="fas fa-print me-1"></i> Print Statement
+            </button>
+        </div>
+    </div>
+
+    <!-- Account Summary Banner -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3 text-center">
+                <div class="col-12 col-md-4">
+                    <small class="text-muted text-uppercase d-block">Total Billed</small>
+                    <h4 class="fw-bold mb-0">KES @totalBilled.ToString("N2")</h4>
+                </div>
+                <div class="col-12 col-md-4">
+                    <small class="text-muted text-uppercase d-block">Total Paid</small>
+                    <h4 class="fw-bold text-success mb-0">KES @totalPaid.ToString("N2")</h4>
+                </div>
+                <div class="col-12 col-md-4">
+                    <small class="text-muted text-uppercase d-block">Balance Due</small>
+                    <h4 class="fw-bold @(balanceDue > 0 ? "text-danger" : "text-success") mb-0">
+                        KES @balanceDue.ToString("N2")
+                    </h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!Model.Any())
+    {
+        <div class="alert alert-info">No invoices recorded for this student yet.</div>
+    }
+    else
+    {
+        foreach (var invoice in Model)
+        {
+            <div class="card shadow-sm mb-4">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 bg-light">
+                    <div>
+                        <strong>@($"INV-{invoice.Id:D5}") &mdash; @invoice.Title</strong>
+                        <span class="ms-2 text-muted small">(Due: @invoice.DueDate.ToString("dd MMM yyyy"))</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fw-semibold">Balance: KES @invoice.Balance.ToString("N2")</span>
+                        <span class="badge @(invoice.Status == "Paid" ? "bg-success" : invoice.Status == "Overdue" ? "bg-danger" : "bg-warning text-dark")">
+                            @invoice.Status
+                        </span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Payment History for this Invoice -->
+                    <h6 class="fw-bold mb-2">Payment History</h6>
+                    @if (!invoice.Payments.Any())
+                    {
+                        <p class="text-muted small mb-3">No payments recorded against this invoice yet.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive mb-3">
+                            <table class="table table-sm table-bordered align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Receipt #</th>
+                                        <th>Date</th>
+                                        <th>Method</th>
+                                        <th>Reference</th>
+                                        <th class="text-end">Amount (KES)</th>
+                                        <th class="text-end no-print">Receipt</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var pay in invoice.Payments.OrderByDescending(p => p.PaymentDate))
+                                    {
+                                        <tr>
+                                            <td class="text-nowrap">@($"RCT-{pay.Id:D5}")</td>
+                                            <td class="text-nowrap">@pay.PaymentDate.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
+                                            <td>@pay.PaymentMethod</td>
+                                            <td>@(pay.TransactionReference ?? "N/A")</td>
+                                            <td class="text-end text-success fw-semibold text-nowrap">@pay.AmountPaid.ToString("N2")</td>
+                                            <td class="text-end text-nowrap no-print">
+                                                <a asp-action="Receipt"
+                                                   asp-route-paymentId="@pay.Id"
+                                                   class="btn btn-sm btn-outline-dark py-0 px-2">
+                                                    <i class="fas fa-receipt me-1"></i> View Receipt
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    <!-- Admin / Employee: Record New Payment Form -->
+                    @if ((User.IsInRole("Admin") || User.IsInRole("Employee")) && invoice.Balance > 0)
+                    {
+                        <form asp-action="RecordPayment" method="post" class="row g-2 align-items-end border-top pt-3 no-print">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="feeInvoiceId" value="@invoice.Id" />
+
+                            <div class="col-12 col-sm-6 col-md-3">
+                                <label class="form-label small fw-semibold mb-1">Amount Paid (KES)</label>
+                                <input type="number" name="amountPaid" step="0.01" min="1" max="@invoice.Balance" value="@invoice.Balance" class="form-control form-control-sm" required />
+                            </div>
+                            <div class="col-12 col-sm-6 col-md-3">
+                                <label class="form-label small fw-semibold mb-1">Payment Method</label>
+                                <select name="paymentMethod" class="form-select form-select-sm">
+                                    <option value="M-Pesa">M-Pesa</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                    <option value="Cash">Cash</option>
+                                    <option value="Card">Card</option>
+                                </select>
+                            </div>
+                            <div class="col-12 col-sm-8 col-md-4">
+                                <label class="form-label small fw-semibold mb-1">Transaction Ref (e.g., M-Pesa Code)</label>
+                                <input type="text" name="transactionReference" class="form-control form-control-sm" placeholder="e.g., QK84H29LP1" />
+                            </div>
+                            <div class="col-12 col-sm-4 col-md-2">
+                                <button type="submit" class="btn btn-sm btn-success w-100">
+                                    <i class="fas fa-plus-circle me-1"></i> Record Pay
+                                </button>
+                            </div>
+                        </form>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>

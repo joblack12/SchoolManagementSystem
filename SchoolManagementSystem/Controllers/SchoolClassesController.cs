@@ -1,17 +1,17 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SchoolManagementSystem.Helpers;
 using SchoolManagementSystem.Models;
 using SchoolManagementSystem.Repositories;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using Microsoft.AspNetCore.Authorization;
 
 namespace SchoolManagementSystem.Controllers
 {
     [Authorize(Roles = "Employee,Admin")]
-
     public class SchoolClassesController : Controller
     {
         private readonly ISchoolClassRepository _schoolClassRepository;
@@ -28,7 +28,7 @@ namespace SchoolManagementSystem.Controllers
             _logger = logger;
         }
 
-        // GET: SchoolClass/Index
+        // GET: SchoolClasses/Index
         public async Task<IActionResult> Index()
         {
             var schoolClasses = await _schoolClassRepository.GetAll().ToListAsync();
@@ -36,73 +36,115 @@ namespace SchoolManagementSystem.Controllers
             return View(schoolClassViewModels);
         }
 
-        // GET: SchoolClass/Create
+        // GET: SchoolClasses/Create
         public IActionResult Create()
         {
             var model = new SchoolClassViewModel();
             return View(model);
         }
 
-        // POST: SchoolClass/Create
+        // POST: SchoolClasses/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(SchoolClassViewModel model)
         {
             if (ModelState.IsValid)
             {
-                var schoolClass = await _converterHelper.ToSchoolClassAsync(model, true);
-                await _schoolClassRepository.CreateAsync(schoolClass);
-                _logger.LogInformation("Turma criada com sucesso: {ClassName}", schoolClass.ClassName);
-                return RedirectToAction(nameof(Index));
+                try
+                {
+                    var schoolClass = await _converterHelper.ToSchoolClassAsync(model, true);
+                    await _schoolClassRepository.CreateAsync(schoolClass);
+                    _logger.LogInformation("School class created successfully: {ClassName}", schoolClass.ClassName);
+                    return RedirectToAction(nameof(Index));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error creating school class: {ClassName}", model.ClassName);
+                    ModelState.AddModelError(string.Empty, "An unexpected error occurred while creating the class. Please try again.");
+                }
             }
 
-            
             return View(model);
         }
 
-        // GET: SchoolClass/Edit/5
-        public async Task<IActionResult> Edit(int id)
+        // GET: SchoolClasses/Edit/5
+        public async Task<IActionResult> Edit(int? id)
         {
-            var schoolClass = await _schoolClassRepository.GetByIdAsync(id);
+            if (id == null) return new NotFoundViewResult("SchoolClassNotFound");
+
+            var schoolClass = await _schoolClassRepository.GetByIdAsync(id.Value);
             if (schoolClass == null)
             {
-                return new NotFoundViewResult("SchoolClassNotFound"); 
+                return new NotFoundViewResult("SchoolClassNotFound");
             }
 
             var model = _converterHelper.ToSchoolClassViewModel(schoolClass);
             return View(model);
         }
 
-        // POST: SchoolClass/Edit/5
+        // POST: SchoolClasses/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(SchoolClassViewModel model)
+        public async Task<IActionResult> Edit(int id, SchoolClassViewModel model)
         {
+            if (id != model.Id) return new NotFoundViewResult("SchoolClassNotFound");
+
+            var existingClass = await _schoolClassRepository.GetByIdAsync(id);
+            if (existingClass == null)
+            {
+                return new NotFoundViewResult("SchoolClassNotFound");
+            }
+
             if (ModelState.IsValid)
             {
-                var schoolClass = await _converterHelper.ToSchoolClassAsync(model, false);
-                await _schoolClassRepository.UpdateAsync(schoolClass);
-                _logger.LogInformation("Turma editada com sucesso: {ClassName}", schoolClass.ClassName);
-                return RedirectToAction(nameof(Index));
+                try
+                {
+                    var schoolClass = await _converterHelper.ToSchoolClassAsync(model, false);
+
+                    // Preserve existing CourseId if not explicitly modified on the form
+                    if (schoolClass.CourseId == null && existingClass.CourseId != null)
+                    {
+                        schoolClass.CourseId = existingClass.CourseId;
+                    }
+
+                    await _schoolClassRepository.UpdateAsync(schoolClass);
+                    _logger.LogInformation("School class updated successfully: {ClassName}", schoolClass.ClassName);
+                    return RedirectToAction(nameof(Index));
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!await _schoolClassRepository.ExistAsync(model.Id))
+                    {
+                        return new NotFoundViewResult("SchoolClassNotFound");
+                    }
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error updating school class: {ClassName}", model.ClassName);
+                    ModelState.AddModelError(string.Empty, "An unexpected error occurred while updating the class. Please try again.");
+                }
             }
 
             return View(model);
         }
 
-        // GET: SchoolClass/Delete/5
-        public async Task<IActionResult> Delete(int id)
+        // GET: SchoolClasses/Delete/5
+        public async Task<IActionResult> Delete(int? id)
         {
-            var schoolClass = await _schoolClassRepository.GetByIdAsync(id);
+            if (id == null) return new NotFoundViewResult("SchoolClassNotFound");
+
+            var schoolClass = await _schoolClassRepository.GetByIdAsync(id.Value);
             if (schoolClass == null)
             {
-                return new NotFoundViewResult("SchoolClassNotFound"); 
+                return new NotFoundViewResult("SchoolClassNotFound");
             }
 
             var model = _converterHelper.ToSchoolClassViewModel(schoolClass);
             return View(model);
         }
 
-        // POST: SchoolClass/Delete/5
+        // POST: SchoolClasses/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
@@ -110,21 +152,21 @@ namespace SchoolManagementSystem.Controllers
             var schoolClass = await _schoolClassRepository.GetByIdAsync(id);
             if (schoolClass == null)
             {
-                return new NotFoundViewResult("SchoolClassNotFound"); 
+                return new NotFoundViewResult("SchoolClassNotFound");
             }
 
             try
             {
                 await _schoolClassRepository.DeleteAsync(schoolClass);
-                _logger.LogInformation("Turma excluída com sucesso: {ClassId}", id);
+                _logger.LogInformation("School class deleted successfully: {ClassId}", id);
                 return RedirectToAction(nameof(Index));
             }
             catch (DbUpdateException ex)
             {
-                
-                _logger.LogError(ex, "Erro ao excluir turma: {ClassId}", id);
-                ModelState.AddModelError("", "Ocorreu um erro ao excluir a turma. Tente novamente.");
-                return View(schoolClass);
+                _logger.LogError(ex, "Error deleting school class: {ClassId}", id);
+                ModelState.AddModelError(string.Empty, "This class cannot be deleted because it has assigned students, teachers, or courses.");
+                var model = _converterHelper.ToSchoolClassViewModel(schoolClass);
+                return View("Delete", model);
             }
         }
 

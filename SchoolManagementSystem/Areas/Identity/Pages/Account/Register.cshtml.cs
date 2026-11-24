@@ -92,7 +92,10 @@ namespace SchoolManagementSystem.Areas.Identity.Pages.Account
 
                 if (result.Succeeded)
                 {
-                    _logger.LogInformation("User created a new account with password.");
+                    // Permanently ensures every new user appears in Student/Teacher Pending dropdowns
+                    await _userManager.AddToRoleAsync(user, "Pending");
+
+                    _logger.LogInformation("User created a new account with password.");                    
 
                     var userId = await _userManager.GetUserIdAsync(user);
                     var code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
@@ -101,13 +104,15 @@ namespace SchoolManagementSystem.Areas.Identity.Pages.Account
                         "/Account/ConfirmEmail",
                         pageHandler: null,
                         values: new { area = "Identity", userId = userId, code = code, returnUrl = returnUrl },
-                        protocol: Request.Scheme);
+                        protocol: Request.Scheme);                    
 
                     await _emailSender.SendEmailAsync(Input.Email, "Confirm your email",
                     $"Please confirm your account by <a href='{HtmlEncoder.Default.Encode(callbackUrl)}'>clicking here</a>.");
 
                     TempData["StatusMessage"] = $"Member {Input.Email} registered successfully.";
                     return RedirectToAction("AdminDashboard", "Dashboard", new { area = "" });
+
+                    
 
                 }
                 foreach (var error in result.Errors)

@@ -67,9 +67,10 @@
                 <img id="newImagePreview" class="rounded-circle shadow-sm" style="width: 150px; height: 150px; display: none;" alt="New Image Preview" />
             </div>
             <div class="ms-3">
-                <input asp-for="ImageFile" type="file" class="form-control-file" accept="image/*" id="newImageFile" />
+                <input asp-for="ImageFile" type="file" class="form-control" accept="image/*" id="newImageFile" />
                 <span asp-validation-for="ImageFile" class="text-danger"></span>
             </div>
+
         </div>
     </div>
 
