@@ -1,4 +1,4 @@
-﻿@{
+@{
     Layout = "_Dashboard";
     ViewBag.PageTitle = "Employee";
     ViewBag.SubPageTitle = "Delete";
@@ -56,7 +56,7 @@
 </div>
 
 @section Scripts {
-    <script src="~/js/formHelpers.js"></script>
+    <script src="~/js/formHelpers.js" asp-append-version="true"></script>
     <script>
         setupSweetAlertOnDelete("confirmDelete", "deleteForm", "You won't be able to revert this!");
     </script>

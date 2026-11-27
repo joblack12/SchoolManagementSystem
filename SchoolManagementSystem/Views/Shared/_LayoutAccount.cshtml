@@ -6,7 +6,7 @@
     <title>@ViewData["Title"] - SchoolManagementSystem</title>
 
     <!-- Bootstrap CSS -->
-    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" asp-append-version="true" />
     <!-- CSS Global para Navbar e Footer -->
     <link rel="stylesheet" href="~/css/style-starter.css" asp-append-version="true" />
     <!-- CSS Específico para as Views de Conta -->
@@ -31,8 +31,8 @@
     <partial name="_Footer" />
 
     <!-- JS Scripts -->
-    <script src="~/lib/jquery/dist/jquery.min.js"></script>
-    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/lib/jquery/dist/jquery.min.js" asp-append-version="true"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js" asp-append-version="true"></script>
     <script src="https://jsdelivr.net"></script>
     <script src="https://syncfusion.com"></script>
     @RenderSection("Scripts", required: false)

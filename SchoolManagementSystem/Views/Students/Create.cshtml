@@ -1,4 +1,4 @@
-﻿@{
+@{
     Layout = "_Dashboard";
     ViewBag.PageTitle = "Students";
     ViewBag.SubPageTitle = "Create";
@@ -91,7 +91,7 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
-    <script src="~/js/formHelpers.js"></script> 
+    <script src="~/js/formHelpers.js" asp-append-version="true"></script> 
 
     <script>
         document.getElementById("pendingUserDropdown").addEventListener("change", function () {

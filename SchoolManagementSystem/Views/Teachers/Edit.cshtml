@@ -1,4 +1,4 @@
-﻿@{
+@{
     Layout = "_Dashboard";
     ViewBag.PageTitle = "Teachers";
     ViewBag.SubPageTitle = "Edit";
@@ -122,7 +122,7 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
-    <script src="~/js/formHelpers.js"></script> 
+    <script src="~/js/formHelpers.js" asp-append-version="true"></script> 
 
     <script>
         setupNewImagePreview("newImageFile", "newImagePreview", "currentImage");

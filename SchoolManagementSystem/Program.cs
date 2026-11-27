@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
@@ -15,6 +17,7 @@ using SchoolManagementSystem.Helpers;
 using SchoolManagementSystem.Repositories;
 using Syncfusion.Licensing;
 using System;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -25,15 +28,40 @@ namespace SchoolManagementSystem
     {
         public static async Task Main(string[] args)
         {
-            var builder = WebApplication.CreateBuilder(args);
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+            {
+                Args = args,
+                ContentRootPath = AppContext.BaseDirectory
+            });
+
+            if (OperatingSystem.IsWindows())
+            {
+                builder.Host.UseWindowsService(options =>
+                {
+                    options.ServiceName = "SchoolManagementService";
+                });
+            }
+
+            // Use C:\ProgramData\SchoolManagementSystem on Windows; keep ContentRootPath on Linux/Docker
+            string baseDataPath = OperatingSystem.IsWindows()
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "SchoolManagementSystem")
+                : builder.Environment.ContentRootPath;
+
+            string keysPath = Path.Combine(baseDataPath, "keys");
+            string logsPath = Path.Combine(baseDataPath, "Logs");
+            string uploadsPath = Path.Combine(baseDataPath, "uploads");
+
+            Directory.CreateDirectory(keysPath);
+            Directory.CreateDirectory(logsPath);
+            Directory.CreateDirectory(uploadsPath);
 
             builder.Services.AddDataProtection()
-                .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, "keys")))
+                .PersistKeysToFileSystem(new DirectoryInfo(keysPath))
                 .SetApplicationName("SchoolManagementSystem");
 
             builder.Logging.ClearProviders();
             builder.Logging.AddConsole();
-            builder.Logging.AddFile("Logs/SchoolManagementSystem-{Date}.txt");
+            builder.Logging.AddFile(Path.Combine(logsPath, "SchoolManagementSystem-{Date}.txt"));
 
             builder.Services.AddControllersWithViews();
             builder.Services.AddRazorPages();
@@ -59,12 +87,9 @@ namespace SchoolManagementSystem
                             errorNumbersToAdd: null);
                     }));
 
-
-            // Consolidated Identity Configuration mapping explicit namespaces for BOTH parameters
             builder.Services.AddIdentity<User, IdentityRole>(cfg =>
             {
-                cfg.Tokens.AuthenticatorTokenProvider =
-                    TokenOptions.DefaultAuthenticatorProvider;
+                cfg.Tokens.AuthenticatorTokenProvider = TokenOptions.DefaultAuthenticatorProvider;
 
                 cfg.SignIn.RequireConfirmedEmail = false;
                 cfg.User.RequireUniqueEmail = true;
@@ -76,9 +101,9 @@ namespace SchoolManagementSystem
                 cfg.Password.RequireNonAlphanumeric = false;
                 cfg.Password.RequiredLength = 6;
             })
-            .AddDefaultTokenProviders()
-            .AddDefaultUI()
-            .AddEntityFrameworkStores<SchoolDbContext>();
+                .AddDefaultTokenProviders()
+                            .AddEntityFrameworkStores<SchoolDbContext>();
+
 
 
             builder.Services.AddAuthentication()
@@ -107,7 +132,7 @@ namespace SchoolManagementSystem
 
             builder.Services.AddScoped<IUserHelper, UserHelper>();
 
-            if (builder.Environment.IsDevelopment() && (string.IsNullOrWhiteSpace(builder.Configuration["Mail:Password"]) || builder.Configuration["Mail:Password"] == "your-16-char-app-password"))
+            if (string.IsNullOrWhiteSpace(builder.Configuration["Mail:Password"]) || builder.Configuration["Mail:Password"] == "your-16-char-app-password")
             {
                 builder.Services.AddTransient<IMailHelper, DevelopmentMailHelper>();
             }
@@ -115,6 +140,7 @@ namespace SchoolManagementSystem
             {
                 builder.Services.AddTransient<IMailHelper, MailHelper>();
             }
+
 
             builder.Services.AddScoped<IConverterHelper, ConverterHelper>();
             builder.Services.AddScoped<IBlobHelper, LocalFileHelper>();
@@ -124,7 +150,6 @@ namespace SchoolManagementSystem
 
             var app = builder.Build();
 
-            // 💡 FIXED SCOPE ASSIGNMENT: Clears limits properly inside the initialization block
             var forwardedOptions = new ForwardedHeadersOptions
             {
                 ForwardedHeaders =
@@ -135,31 +160,31 @@ namespace SchoolManagementSystem
             forwardedOptions.KnownIPNetworks.Clear();
             forwardedOptions.KnownProxies.Clear();
 
-            // Remove this for direct local Docker access:
-            // app.UseForwardedHeaders(forwardedOptions);
-
-
-            using (var scope = app.Services.CreateScope())
+            _ = Task.Run(async () =>
             {
-                var services = scope.ServiceProvider;
-                var logger = services.GetRequiredService<ILogger<Program>>();
+                var logger = app.Services.GetRequiredService<ILogger<Program>>();
+                var stoppingToken = app.Lifetime.ApplicationStopping;
 
                 int retryCount = 0;
-                int maxRetries = 6;
+                int maxRetries = 12;
                 bool databaseReady = false;
 
-                while (!databaseReady && retryCount < maxRetries)
+                while (!databaseReady && retryCount < maxRetries && !stoppingToken.IsCancellationRequested)
                 {
                     try
                     {
                         retryCount++;
+
+                        // Create a fresh scope on every attempt so DbContext state is never stale
+                        using var scope = app.Services.CreateScope();
+                        var services = scope.ServiceProvider;
                         var context = services.GetRequiredService<SchoolDbContext>();
 
                         logger.LogInformation("Attempting to connect and migrate database (Attempt {Retry} of {Max})...", retryCount, maxRetries);
 
-                        if ((await context.Database.GetPendingMigrationsAsync()).Any())
+                        if ((await context.Database.GetPendingMigrationsAsync(stoppingToken)).Any())
                         {
-                            await context.Database.MigrateAsync();
+                            await context.Database.MigrateAsync(stoppingToken);
                         }
 
                         var seeder = services.GetRequiredService<SeedDb>();
@@ -168,36 +193,48 @@ namespace SchoolManagementSystem
                         databaseReady = true;
                         logger.LogInformation("Database migration and seeding completed successfully.");
                     }
+                    catch (OperationCanceledException)
+                    {
+                        // Service is shutting down; exit cleanly
+                        break;
+                    }
                     catch (SqlException ex)
                     {
                         logger.LogWarning("SQL Server is not ready yet (Error {Number}): {Message}. Waiting 10 seconds before retry {Retry}/{Max}...",
                             ex.Number, ex.Message, retryCount, maxRetries);
-                        await Task.Delay(TimeSpan.FromSeconds(10));
+                        await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
                     }
                     catch (Exception ex)
                     {
                         logger.LogError(ex, "An unexpected error occurred while migrating or seeding the database (Attempt {Retry}/{Max}).", retryCount, maxRetries);
-                        await Task.Delay(TimeSpan.FromSeconds(10));
+                        await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
                     }
                 }
 
-                if (!databaseReady)
+                if (!databaseReady && !stoppingToken.IsCancellationRequested)
                 {
-                    logger.LogCritical("Could not connect to or migrate the database after {Max} attempts. Shutting down.", maxRetries);
-                    throw new InvalidOperationException("Database migration and seeding failed after maximum retries.");
+                    logger.LogCritical("Database failed to initialize after {Max} attempts.", maxRetries);
                 }
-            }
+            });
 
 
-            // Ensure this block does NOT force loops during local container orchestration
             if (!app.Environment.IsDevelopment())
             {
                 app.UseStatusCodePagesWithReExecute("/Error/{0}");
-                // @* app.UseHttpsRedirection(); *@ <-- Comment this line out completely if it is active!
             }
 
-
             app.UseStaticFiles();
+
+            // On Windows, serve uploaded photos/documents from C:\ProgramData\SchoolManagementSystem\uploads
+            if (OperatingSystem.IsWindows())
+            {
+                app.UseStaticFiles(new StaticFileOptions
+                {
+                    FileProvider = new PhysicalFileProvider(uploadsPath),
+                    RequestPath = "/uploads"
+                });
+            }
+
             app.UseRouting();
 
             app.UseAuthentication();
